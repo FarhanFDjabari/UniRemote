@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark-first: this app is used in dark rooms. -->
+    <style name="Theme.TvRemote" parent="android:Theme.Material.NoActionBar" />
+</resources>
