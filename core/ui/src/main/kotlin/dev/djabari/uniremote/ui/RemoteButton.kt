@@ -104,24 +104,37 @@ fun RemoteButton(
                             onClick()
 
                             var repeatJob: Job? = null
-                            if (repeatable) {
-                                repeatJob = scope.launch {
-                                    delay(500)
-                                    while (isActive) {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        onClick()
-                                        delay(80)
+                            var pressEnded = false
+                            try {
+                                if (repeatable) {
+                                    repeatJob = scope.launch {
+                                        delay(500)
+                                        while (isActive) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            onClick()
+                                            delay(80)
+                                        }
                                     }
                                 }
-                            }
 
-                            val upOrCancellation = waitForUpOrCancellation()
-                            repeatJob?.cancel()
-                            if (upOrCancellation != null) {
-                                effectiveInteractionSource.tryEmit(PressInteraction.Release(press))
-                                upOrCancellation.consume()
-                            } else {
-                                effectiveInteractionSource.tryEmit(PressInteraction.Cancel(press))
+                                val upOrCancellation = waitForUpOrCancellation()
+                                if (upOrCancellation != null) {
+                                    effectiveInteractionSource.tryEmit(PressInteraction.Release(press))
+                                    upOrCancellation.consume()
+                                } else {
+                                    effectiveInteractionSource.tryEmit(PressInteraction.Cancel(press))
+                                }
+                                pressEnded = true
+                            } finally {
+                                // The gesture can be cancelled outright — disabling the button
+                                // swaps this modifier away mid-press — and then the lines above
+                                // never run. Without this the repeat job outlives the gesture
+                                // and keeps firing keys at the TV, and the press interaction
+                                // never ends, leaving the button stuck looking pressed.
+                                repeatJob?.cancel()
+                                if (!pressEnded) {
+                                    effectiveInteractionSource.tryEmit(PressInteraction.Cancel(press))
+                                }
                             }
                         }
                     }
