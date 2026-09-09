@@ -5,6 +5,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -55,12 +56,19 @@ fun RemoteButton(
     colors: ButtonColors = ButtonDefaults.filledTonalButtonColors(),
     border: BorderStroke? = null,
     contentPadding: PaddingValues = PaddingValues(12.dp),
+    /**
+     * Optional externally-owned interaction source, mirroring Material's Button API.
+     * Lets tests/previews drive the pressed state deterministically; null keeps the
+     * internal one.
+     */
+    interactionSource: MutableInteractionSource? = null,
     content: @Composable () -> Unit,
 ) {
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
+    val ownedInteractionSource = remember { MutableInteractionSource() }
+    val effectiveInteractionSource = interactionSource ?: ownedInteractionSource
+    val isPressed by effectiveInteractionSource.collectIsPressedAsState()
 
     val containerColor = if (enabled) {
         if (isPressed) colors.containerColor.copy(alpha = 0.8f) else colors.containerColor
@@ -88,6 +96,10 @@ fun RemoteButton(
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
                             down.consume()
+                            val press = PressInteraction.Press(down.position)
+                            // tryEmit: the gesture scope is restricted, and unlike emit this
+                            // cannot suspend behind a slow collector and stall the gesture.
+                            effectiveInteractionSource.tryEmit(press)
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             onClick()
 
@@ -103,9 +115,14 @@ fun RemoteButton(
                                 }
                             }
 
-                            val upOrCancel = waitForUpOrCancellation()
+                            val upOrCancellation = waitForUpOrCancellation()
                             repeatJob?.cancel()
-                            upOrCancel?.consume()
+                            if (upOrCancellation != null) {
+                                effectiveInteractionSource.tryEmit(PressInteraction.Release(press))
+                                upOrCancellation.consume()
+                            } else {
+                                effectiveInteractionSource.tryEmit(PressInteraction.Cancel(press))
+                            }
                         }
                     }
                 } else Modifier

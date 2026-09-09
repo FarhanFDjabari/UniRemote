@@ -9,7 +9,6 @@ import dev.djabari.uniremote.session.RemoteSession
 import dev.djabari.uniremote.transport.TransportCapability
 import dev.djabari.uniremote.transport.TransportState
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,12 +31,10 @@ class TouchpadViewModel @Inject constructor(
 
     /**
      * Conflated channel to ensure we never overwhelm the Bluetooth HID report buffer.
-     * Motion reports flush at ~60-100Hz cadence.
+     * Motion reports flush at ~60-100Hz cadence. CONFLATED already implies
+     * DROP_OLDEST — passing an explicit overflow policy is illegal and throws.
      */
-    private val deltaChannel = Channel<PointerDelta>(
-        capacity = Channel.CONFLATED,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
-    )
+    private val deltaChannel = Channel<PointerDelta>(capacity = Channel.CONFLATED)
 
     init {
         viewModelScope.launch {

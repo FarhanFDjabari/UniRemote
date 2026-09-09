@@ -66,6 +66,10 @@ enum class RemoteDestination(
     PAIRING("Pairing", Icons.Default.Bluetooth),
 }
 
+/**
+ * @param layout The layout regime. Injected so tests and previews can pin a regime; real
+ *   callers get the window-derived [rememberRemoteLayout].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UniRemoteApp(
@@ -74,8 +78,8 @@ fun UniRemoteApp(
     keyboardViewModel: KeyboardViewModel,
     pairingViewModel: PairingViewModel,
     modifier: Modifier = Modifier,
+    layout: RemoteLayout = rememberRemoteLayout(),
 ) {
-    val layout = rememberRemoteLayout()
     var currentDestination by remember { mutableStateOf(RemoteDestination.REMOTE) }
     val connection by remoteViewModel.connection.collectAsState()
 

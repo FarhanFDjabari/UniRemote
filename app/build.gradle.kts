@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+    alias(libs.plugins.roborazzi)
 }
 
 android {
@@ -28,6 +29,13 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures { compose = true }
+
+    testOptions {
+        unitTests {
+            // Robolectric + Roborazzi screenshot tests need the merged resources/manifest.
+            isIncludeAndroidResources = true
+        }
+    }
 }
 
 dependencies {
@@ -54,4 +62,16 @@ dependencies {
     implementation(libs.hilt.android)
     implementation(libs.hilt.navigation.compose)
     ksp(libs.hilt.compiler)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.truth)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.ext.junit)
+    testImplementation(libs.compose.ui.test.junit4)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    debugImplementation(libs.compose.ui.test.manifest)
+
+    // Screenshot-test scaffolding constructs the PairingViewModel dependencies directly.
+    testImplementation(project(":transport:network"))
 }
