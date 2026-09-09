@@ -9,6 +9,7 @@ import dev.djabari.uniremote.session.RemoteSession
 import dev.djabari.uniremote.transport.TransportCapability
 import dev.djabari.uniremote.transport.TransportState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,7 +38,10 @@ class TouchpadViewModel @Inject constructor(
     private val deltaChannel = Channel<PointerDelta>(capacity = Channel.CONFLATED)
 
     init {
-        viewModelScope.launch {
+        // Off the main dispatcher deliberately: this poll never stops while the ViewModel
+        // lives, and on Dispatchers.Main it would leave the looper permanently non-idle,
+        // which stalls Espresso and wakes the main thread 83 times a second for nothing.
+        viewModelScope.launch(Dispatchers.Default) {
             while (isActive) {
                 delay(12) // ~83 Hz cadence
                 val delta = deltaChannel.tryReceive().getOrNull()
