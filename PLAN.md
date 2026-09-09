@@ -1,4 +1,4 @@
-# Universal TV Remote — Android (Kotlin + Compose)
+# UniRemote — Android (Kotlin + Compose)
 
 **Transport strategy:** Bluetooth Classic HID Device as primary, network control as fallback.
 **Target:** phone + tablet + foldable, adaptive layouts throughout.

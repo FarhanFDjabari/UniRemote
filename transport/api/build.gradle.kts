@@ -1,10 +1,9 @@
 plugins {
     alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.android)
 }
 
 android {
-    namespace = "dev.djabari.tvremote.transport.api"
+    namespace = "dev.djabari.uniremote.transport.api"
     compileSdk = 35
 
     defaultConfig {
@@ -14,7 +13,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
 }
 
 dependencies {
