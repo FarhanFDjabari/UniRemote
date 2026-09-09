@@ -32,15 +32,24 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
-        startSessionService()
+        // Android validates connectedDevice FGS prerequisites at startForeground(). Do not
+        // start the service until the Bluetooth runtime permissions have been granted.
+        if (PermissionUtils.hasBluetoothPermissions(this)) {
+            startSessionService()
+        }
 
         setContent {
             val permissionsLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.RequestMultiplePermissions(),
-            ) { /* Permissions handled */ }
+            ) {
+                if (PermissionUtils.hasBluetoothPermissions(this@MainActivity)) {
+                    startSessionService()
+                    reconnectSession()
+                }
+            }
 
             LaunchedEffect(Unit) {
-                val needed = PermissionUtils.getRequiredBluetoothPermissions()
+                val needed = PermissionUtils.getRequiredRuntimePermissions()
                 if (!PermissionUtils.hasPermissions(this@MainActivity, needed)) {
                     permissionsLauncher.launch(needed.toTypedArray())
                 }
@@ -66,6 +75,12 @@ class MainActivity : ComponentActivity() {
      */
     override fun onResume() {
         super.onResume()
+        if (PermissionUtils.hasBluetoothPermissions(this)) {
+            reconnectSession()
+        }
+    }
+
+    private fun reconnectSession() {
         lifecycleScope.launch { session.reconnect() }
     }
 

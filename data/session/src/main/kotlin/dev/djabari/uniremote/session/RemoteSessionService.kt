@@ -17,6 +17,7 @@ import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import dev.djabari.uniremote.common.PermissionUtils
 import dev.djabari.uniremote.transport.TransportState
 import dev.djabari.uniremote.transport.bthid.RealHidDeviceProxy
 import dagger.hilt.android.AndroidEntryPoint
@@ -72,6 +73,12 @@ class RemoteSessionService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        if (!PermissionUtils.hasBluetoothPermissions(this)) {
+            // A sticky restart can occur after Nearby Devices was revoked and bypass the
+            // activity's permission flow. Do not touch Bluetooth or promote to an FGS.
+            stopSelf()
+            return
+        }
         createNotificationChannel()
         initBluetoothHidProfile()
         observeSessionState()
@@ -80,6 +87,11 @@ class RemoteSessionService : Service() {
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (!PermissionUtils.hasBluetoothPermissions(this)) {
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+
         if (intent?.action == ACTION_DISCONNECT) {
             serviceScope.launch {
                 session.disconnect()
@@ -174,13 +186,17 @@ class RemoteSessionService : Service() {
         // Teardown has to finish before the process lets go of the profile proxy: a leaked
         // HID registration cannot be reclaimed until the phone reboots. Launching it on a
         // scope that is cancelled on the next line meant it never ran at all.
-        runBlocking { withTimeoutOrNull(DISCONNECT_TIMEOUT_MS) { session.disconnect() } }
+        if (PermissionUtils.hasBluetoothPermissions(this)) {
+            runBlocking { withTimeoutOrNull(DISCONNECT_TIMEOUT_MS) { session.disconnect() } }
+        }
         serviceScope.cancel()
 
-        hidProfile?.let { proxy ->
-            bluetoothAdapter?.closeProfileProxy(BluetoothProfile.HID_DEVICE, proxy)
-            hidProfile = null
-            hidProxy.setHidDevice(null)
+        if (PermissionUtils.hasBluetoothPermissions(this)) {
+            hidProfile?.let { proxy ->
+                bluetoothAdapter?.closeProfileProxy(BluetoothProfile.HID_DEVICE, proxy)
+                hidProfile = null
+                hidProxy.setHidDevice(null)
+            }
         }
 
         super.onDestroy()
