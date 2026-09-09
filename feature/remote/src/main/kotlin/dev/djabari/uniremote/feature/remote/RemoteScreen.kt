@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,13 +25,15 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.VolumeDown
-import androidx.compose.material.icons.filled.VolumeMute
+import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -43,12 +47,27 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
 import dev.djabari.uniremote.model.RemoteKey
 import dev.djabari.uniremote.transport.TransportCapability
 import dev.djabari.uniremote.transport.TransportState
 import dev.djabari.uniremote.ui.DpadControl
 import dev.djabari.uniremote.ui.RemoteButton
+
+/** Widest the remote ever gets — beyond this it centres instead of stretching. */
+private val RemoteMaxWidth = 400.dp
+private val SectionSpacing = 20.dp
+
+private val RockerWidth = 88.dp
+private val RockerSegmentHeight = 56.dp
+private val RockerTopShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp, bottomStart = 4.dp, bottomEnd = 4.dp)
+private val RockerMiddleShape = RoundedCornerShape(4.dp)
+private val RockerBottomShape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 24.dp, bottomEnd = 24.dp)
+
+private val MediaButtonSize = 52.dp
+private val MediaPrimarySize = 64.dp
+private val NumpadButtonSize = 56.dp
 
 @Composable
 fun RemoteScreen(
@@ -60,23 +79,28 @@ fun RemoteScreen(
     val isConnected = connection is TransportState.Connected
     var showNumpad by remember { mutableStateOf(false) }
 
+    val hasNumpad = capabilities.contains(TransportCapability.NUMPAD)
+    val hasVolume = capabilities.contains(TransportCapability.VOLUME)
+    val hasChannel = capabilities.contains(TransportCapability.CHANNEL)
+
     val scrollState = rememberScrollState()
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
-            .padding(16.dp),
+            .padding(horizontal = 16.dp, vertical = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(SectionSpacing),
     ) {
-        // Top Bar Controls: Power, Numpad Toggle, Info/Menu
+        val sectionModifier = Modifier.widthIn(max = RemoteMaxWidth).fillMaxWidth()
+
+        // Power, numpad toggle, wake
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = sectionModifier,
+            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Power Off
             RemoteButton(
                 onClick = { viewModel.onKeyTap(RemoteKey.POWER_OFF) },
                 enabled = isConnected && capabilities.contains(TransportCapability.POWER_OFF),
@@ -90,19 +114,6 @@ fun RemoteScreen(
                 Icon(Icons.Default.PowerSettingsNew, contentDescription = null)
             }
 
-            // Numpad Toggle
-            if (capabilities.contains(TransportCapability.NUMPAD)) {
-                RemoteButton(
-                    onClick = { showNumpad = !showNumpad },
-                    enabled = isConnected,
-                    contentDescription = "Toggle Number Pad",
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Text(if (showNumpad) "Hide 123" else "123")
-                }
-            }
-
-            // Power On (WoL - only available when transport supports POWER_ON)
             if (capabilities.contains(TransportCapability.POWER_ON)) {
                 RemoteButton(
                     onClick = { viewModel.onKeyTap(RemoteKey.POWER_ON) },
@@ -116,24 +127,43 @@ fun RemoteScreen(
                     Text("ON")
                 }
             }
+
+            if (hasNumpad) {
+                RemoteButton(
+                    onClick = { showNumpad = !showNumpad },
+                    enabled = isConnected,
+                    contentDescription = if (showNumpad) "Hide Number Pad" else "Show Number Pad",
+                    shape = CircleShape,
+                    colors = if (showNumpad) {
+                        ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    } else {
+                        ButtonDefaults.filledTonalButtonColors()
+                    },
+                ) {
+                    Text("123")
+                }
+            }
         }
 
-        // Expandable Numpad
         AnimatedVisibility(
-            visible = showNumpad && capabilities.contains(TransportCapability.NUMPAD),
+            visible = showNumpad && hasNumpad,
             enter = expandVertically(),
             exit = shrinkVertically(),
         ) {
             NumpadSection(
                 onKey = { viewModel.onKeyTap(it) },
                 enabled = isConnected,
+                modifier = sectionModifier,
             )
         }
 
-        // Navigation Row: Back, Home, Menu
+        // Back, Home, Menu
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+            modifier = sectionModifier,
+            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             RemoteButton(
@@ -164,109 +194,93 @@ fun RemoteScreen(
             }
         }
 
-        // Central D-pad Control
         DpadControl(
             onKey = { viewModel.onKeyTap(it) },
             enabled = isConnected && capabilities.contains(TransportCapability.DPAD),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
+            modifier = sectionModifier.padding(vertical = 4.dp),
         )
 
-        // Volume & Channel Controls
-        if (capabilities.contains(TransportCapability.VOLUME) || capabilities.contains(TransportCapability.CHANNEL)) {
+        // Volume and channel rockers. Fixed segment sizes keep the two columns aligned
+        // whichever of them the transport actually offers.
+        if (hasVolume || hasChannel) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                modifier = sectionModifier,
+                horizontalArrangement = Arrangement.spacedBy(32.dp, Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Volume Column
-                if (capabilities.contains(TransportCapability.VOLUME)) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        RemoteButton(
+                if (hasVolume) {
+                    RockerColumn {
+                        RockerButton(
                             onClick = { viewModel.onKeyTap(RemoteKey.VOLUME_UP) },
                             enabled = isConnected,
-                            repeatable = true,
                             contentDescription = "Volume Up",
-                            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 4.dp, bottomEnd = 4.dp),
+                            shape = RockerTopShape,
                         ) {
                             Icon(Icons.Default.VolumeUp, contentDescription = null)
                         }
-                        RemoteButton(
+                        RockerButton(
                             onClick = { viewModel.onKeyTap(RemoteKey.MUTE) },
                             enabled = isConnected,
+                            repeatable = false,
                             contentDescription = "Mute",
-                            shape = RoundedCornerShape(4.dp),
+                            shape = RockerMiddleShape,
                         ) {
-                            Icon(Icons.Default.VolumeMute, contentDescription = null)
+                            Icon(Icons.Default.VolumeOff, contentDescription = null)
                         }
-                        RemoteButton(
+                        RockerButton(
                             onClick = { viewModel.onKeyTap(RemoteKey.VOLUME_DOWN) },
                             enabled = isConnected,
-                            repeatable = true,
                             contentDescription = "Volume Down",
-                            shape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 16.dp, bottomEnd = 16.dp),
+                            shape = RockerBottomShape,
                         ) {
                             Icon(Icons.Default.VolumeDown, contentDescription = null)
                         }
                     }
                 }
 
-                // Channel Column
-                if (capabilities.contains(TransportCapability.CHANNEL)) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        RemoteButton(
+                if (hasChannel) {
+                    RockerColumn {
+                        RockerButton(
                             onClick = { viewModel.onKeyTap(RemoteKey.CHANNEL_UP) },
                             enabled = isConnected,
-                            repeatable = true,
                             contentDescription = "Channel Up",
-                            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 4.dp, bottomEnd = 4.dp),
+                            shape = RockerTopShape,
                         ) {
-                            Text("CH +")
+                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = null)
                         }
-                        Spacer(modifier = Modifier.height(48.dp))
-                        RemoteButton(
+                        RockerLabel("CH")
+                        RockerButton(
                             onClick = { viewModel.onKeyTap(RemoteKey.CHANNEL_DOWN) },
                             enabled = isConnected,
-                            repeatable = true,
                             contentDescription = "Channel Down",
-                            shape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 16.dp, bottomEnd = 16.dp),
+                            shape = RockerBottomShape,
                         ) {
-                            Text("CH -")
+                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = null)
                         }
                     }
                 }
             }
         }
 
-        // Media Playback Controls
         if (capabilities.contains(TransportCapability.MEDIA_KEYS)) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                modifier = sectionModifier,
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                RemoteButton(
+                MediaButton(
                     onClick = { viewModel.onKeyTap(RemoteKey.PREV_TRACK) },
                     enabled = isConnected,
                     contentDescription = "Previous Track",
-                    shape = CircleShape,
                 ) {
                     Icon(Icons.Default.SkipPrevious, contentDescription = null)
                 }
 
-                RemoteButton(
+                MediaButton(
                     onClick = { viewModel.onKeyTap(RemoteKey.REWIND) },
                     enabled = isConnected,
                     repeatable = true,
                     contentDescription = "Rewind",
-                    shape = CircleShape,
                 ) {
                     Icon(Icons.Default.FastRewind, contentDescription = null)
                 }
@@ -276,6 +290,8 @@ fun RemoteScreen(
                     enabled = isConnected,
                     contentDescription = "Play or Pause",
                     shape = CircleShape,
+                    contentPadding = PaddingValues(0.dp),
+                    modifier = Modifier.size(MediaPrimarySize),
                     colors = ButtonDefaults.filledTonalButtonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -284,27 +300,95 @@ fun RemoteScreen(
                     Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(28.dp))
                 }
 
-                RemoteButton(
+                MediaButton(
                     onClick = { viewModel.onKeyTap(RemoteKey.FAST_FORWARD) },
                     enabled = isConnected,
                     repeatable = true,
                     contentDescription = "Fast Forward",
-                    shape = CircleShape,
                 ) {
                     Icon(Icons.Default.FastForward, contentDescription = null)
                 }
 
-                RemoteButton(
+                MediaButton(
                     onClick = { viewModel.onKeyTap(RemoteKey.NEXT_TRACK) },
                     enabled = isConnected,
                     contentDescription = "Next Track",
-                    shape = CircleShape,
                 ) {
                     Icon(Icons.Default.SkipNext, contentDescription = null)
                 }
             }
         }
     }
+}
+
+@Composable
+private fun RockerColumn(content: @Composable () -> Unit) {
+    Column(
+        modifier = Modifier.width(RockerWidth),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun RockerButton(
+    onClick: () -> Unit,
+    enabled: Boolean,
+    contentDescription: String,
+    shape: Shape,
+    repeatable: Boolean = true,
+    content: @Composable () -> Unit,
+) {
+    RemoteButton(
+        onClick = onClick,
+        enabled = enabled,
+        repeatable = repeatable,
+        contentDescription = contentDescription,
+        shape = shape,
+        contentPadding = PaddingValues(0.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(RockerSegmentHeight),
+        content = content,
+    )
+}
+
+@Composable
+private fun RockerLabel(text: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(RockerSegmentHeight),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun MediaButton(
+    onClick: () -> Unit,
+    enabled: Boolean,
+    contentDescription: String,
+    repeatable: Boolean = false,
+    content: @Composable () -> Unit,
+) {
+    RemoteButton(
+        onClick = onClick,
+        enabled = enabled,
+        repeatable = repeatable,
+        contentDescription = contentDescription,
+        shape = CircleShape,
+        contentPadding = PaddingValues(0.dp),
+        modifier = Modifier.size(MediaButtonSize),
+        content = content,
+    )
 }
 
 @Composable
@@ -321,13 +405,13 @@ private fun NumpadSection(
     )
 
     Column(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         rows.forEach { row ->
             Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 row.forEach { (key, label) ->
@@ -337,13 +421,13 @@ private fun NumpadSection(
                             enabled = enabled,
                             contentDescription = "Digit $label",
                             shape = CircleShape,
-                            modifier = Modifier.size(56.dp),
+                            modifier = Modifier.size(NumpadButtonSize),
                             contentPadding = PaddingValues(0.dp),
                         ) {
                             Text(label, style = MaterialTheme.typography.titleMedium)
                         }
                     } else {
-                        Spacer(modifier = Modifier.size(56.dp))
+                        Spacer(modifier = Modifier.size(NumpadButtonSize))
                     }
                 }
             }
