@@ -112,7 +112,10 @@ class DefaultRemoteSession @Inject constructor(
             _activeTransport.value = transport
             val result = transport.connect(target)
             if (result.isSuccess) {
-                repository.saveTarget(target)
+                // A transport may have resolved the target better than we knew it (e.g. the
+                // network transport silently identified the brand of an unlabelled TV).
+                // Persist that so the identification never has to run again.
+                repository.saveTarget(transport.resolvedTarget ?: target)
                 repository.setLastConnectedTargetId(target.id)
                 return Result.success(Unit)
             } else {

@@ -45,26 +45,32 @@ class RokuAdapter(
     override suspend fun connect(target: RemoteTarget): Result<Unit> = withContext(Dispatchers.IO) {
         val ip = target.ipAddress
             ?: return@withContext Result.failure(IllegalArgumentException("Roku target requires an IP address"))
-        runCatching {
-            val url = URL("http://$ip:$port/query/device-info")
-            val conn = (url.openConnection() as HttpURLConnection).apply {
-                connectTimeout = 3000
-                readTimeout = 3000
-                requestMethod = "GET"
-            }
-            try {
-                val code = conn.responseCode
-                if (code in 200..299) {
-                    activeTarget = target
-                    Unit
-                } else {
-                    throw IllegalStateException("Roku returned HTTP $code")
-                }
-            } finally {
-                conn.disconnect()
-            }
+        if (!probe(ip)) {
+            return@withContext Result.failure(IllegalStateException("Roku ECP did not answer at $ip"))
         }
+        activeTarget = target
+        Result.success(Unit)
     }
+
+    override suspend fun identify(target: RemoteTarget): Boolean = withContext(Dispatchers.IO) {
+        val ip = target.ipAddress ?: return@withContext false
+        probe(ip)
+    }
+
+    /** Silent GET that only succeeds against a live Roku ECP endpoint. No side effects. */
+    private fun probe(ip: String): Boolean = runCatching {
+        val url = URL("http://$ip:$port/query/device-info")
+        val conn = (url.openConnection() as HttpURLConnection).apply {
+            connectTimeout = 3000
+            readTimeout = 3000
+            requestMethod = "GET"
+        }
+        try {
+            conn.responseCode in 200..299
+        } finally {
+            conn.disconnect()
+        }
+    }.getOrDefault(false)
 
     override suspend fun send(key: RemoteKey): Result<Unit> = withContext(Dispatchers.IO) {
         val ip = activeTarget?.ipAddress

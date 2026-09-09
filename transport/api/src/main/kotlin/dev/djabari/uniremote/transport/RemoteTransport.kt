@@ -30,6 +30,13 @@ interface RemoteTransport {
     /** True if this transport could plausibly reach [target] at all. Cheap, no I/O. */
     fun supports(target: RemoteTarget): Boolean
 
+    /**
+     * The target as this transport actually resolved it after a successful [connect] —
+     * for example the brand silently identified for an unlabelled TV. Null when nothing
+     * changed. Callers that persist targets should store this instead of the input.
+     */
+    val resolvedTarget: RemoteTarget? get() = null
+
     suspend fun connect(target: RemoteTarget): Result<Unit>
 
     suspend fun disconnect()

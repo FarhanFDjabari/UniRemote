@@ -30,6 +30,7 @@ class DefaultRemoteSessionTest {
         private val connectResult: Result<Unit>,
         private val transportCapabilities: Set<TransportCapability> = emptySet(),
         private val connectDelayMs: Long = 0,
+        private val resolved: RemoteTarget? = null,
     ) : RemoteTransport {
         var connectCount = 0
         var disconnectCount = 0
@@ -39,6 +40,7 @@ class DefaultRemoteSessionTest {
         override val state: StateFlow<TransportState> = _state
         private val _capabilities = MutableStateFlow<Set<TransportCapability>>(emptySet())
         override val capabilities: StateFlow<Set<TransportCapability>> = _capabilities
+        override val resolvedTarget: RemoteTarget? get() = resolved
 
         override fun supports(target: RemoteTarget) = true
 
@@ -115,6 +117,20 @@ class DefaultRemoteSessionTest {
         assertThat(network.connectCount).isEqualTo(1)
         assertThat(store.saved).containsExactly(target)
         assertThat(store.lastConnectedId).isEqualTo("tv-1")
+    }
+
+    @Test
+    fun `persists the brand a transport resolved for an unlabelled target`() = runTest {
+        val generic = target.copy(brand = TvBrand.GENERIC)
+        val resolved = generic.copy(brand = TvBrand.ROKU)
+        val network = FakeTransport(TransportId.NETWORK, Result.success(Unit), resolved = resolved)
+        val store = FakeTargetStore()
+        val session = DefaultRemoteSession(TransportSelector(listOf(network)), store, backgroundScope)
+
+        val result = session.connect(generic)
+
+        assertThat(result.isSuccess).isTrue()
+        assertThat(store.saved).containsExactly(resolved)
     }
 
     @Test
