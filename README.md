@@ -54,7 +54,7 @@ For a Wake-on-LAN-only setup, add the TV with its MAC address and select `GENERI
 
 ```sh
 git clone <repository-url>
-cd UniversalTvRemote
+cd UniRemote
 
 ./gradlew assembleDebug
 ```
@@ -118,5 +118,5 @@ the model and firmware tested.
 
 ## License
 
-Copyright 2026 UniversalTvRemote contributors. Licensed under the
+Copyright 2026 UniRemote contributors. Licensed under the
 [Apache License 2.0](LICENSE).

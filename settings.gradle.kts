@@ -13,7 +13,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "uni-remote"
+rootProject.name = "UniRemote"
 
 include(":app")
 
