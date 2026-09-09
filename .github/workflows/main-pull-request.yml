@@ -8,6 +8,7 @@ on:
       - opened
       - reopened
       - synchronize
+      - ready_for_review
 
 permissions:
   contents: read
@@ -58,6 +59,10 @@ jobs:
   android-journey:
     name: Android device journey
     needs: verify
+    # The emulator is by far the most expensive job in this workflow, and this is a
+    # private repository, so its minutes come out of the account quota. Drafts are
+    # where the churn is, so it waits until the PR is marked ready for review.
+    if: ${{ github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -80,6 +85,30 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      # A cold boot cost 52s of the job's first run. The snapshot is created once and
+      # reused until the key changes, so only the first run on a new image pays for it.
+      - name: Cache the AVD snapshot
+        id: avd-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-35-google_apis-x86_64-pixel_7
+
+      - name: Create the AVD snapshot
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: echo "Snapshot generated."
+
       - name: Run the pairing journey on Android 15
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -87,6 +116,8 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_7
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: ./gradlew --stacktrace :app:connectedDebugAndroidTest
 
@@ -104,6 +135,7 @@ jobs:
   release-apk:
     name: Build release APK
     needs: [verify, android-journey]
+    if: ${{ github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
