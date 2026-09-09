@@ -191,13 +191,16 @@ class RemoteSessionService : Service() {
         }
         serviceScope.cancel()
 
-        if (PermissionUtils.hasBluetoothPermissions(this)) {
-            hidProfile?.let { proxy ->
+        // Only closeProfileProxy touches the Bluetooth stack, so only it needs the guard.
+        // Releasing the references is a local write, and skipping it when the permission had
+        // been revoked left the process holding a HID device it could no longer use.
+        hidProfile?.let { proxy ->
+            if (PermissionUtils.hasBluetoothPermissions(this)) {
                 bluetoothAdapter?.closeProfileProxy(BluetoothProfile.HID_DEVICE, proxy)
-                hidProfile = null
-                hidProxy.setHidDevice(null)
             }
+            hidProfile = null
         }
+        hidProxy.setHidDevice(null)
 
         super.onDestroy()
     }
