@@ -90,7 +90,9 @@ class PairingJourneyTest {
 
     @Test
     fun addMacOnlyGenericTarget_connectAndPowerOn() {
-        composeRule.onNodeWithContentDescription("Pairing").performClick()
+        // The navigation item merges its icon and label, so the icon's description
+        // is only reachable in the unmerged tree.
+        composeRule.onNodeWithContentDescription("Pairing", useUnmergedTree = true).performClick()
         composeRule.onNodeWithText("No TV Connected").assertIsDisplayed()
 
         composeRule.onNodeWithTag("pairing-add-tv").performClick()
@@ -113,7 +115,9 @@ class PairingJourneyTest {
         assertEquals(WAKE_ON_LAN_MAC, target.macAddress)
         composeRule.onNodeWithText("Connected: Bedroom TV").assertIsDisplayed()
 
-        composeRule.onNodeWithContentDescription("Remote").performClick()
+        // The navigation item merges its icon and label, so the icon's description
+        // is only reachable in the unmerged tree.
+        composeRule.onNodeWithContentDescription("Remote", useUnmergedTree = true).performClick()
         composeRule.onNodeWithContentDescription("Power On (Wake-on-LAN)").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
             session.lastPressedKey == RemoteKey.POWER_ON
