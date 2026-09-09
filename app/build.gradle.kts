@@ -19,8 +19,23 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Signing is configured only when the credentials are present, so a checkout without
+    // the keystore (CI, or a fresh clone) still builds an unsigned release instead of failing.
+    val releaseStoreFile = providers.gradleProperty("UNIREMOTE_STORE_FILE").orNull?.let(::file)
+    signingConfigs {
+        if (releaseStoreFile?.exists() == true) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = providers.gradleProperty("UNIREMOTE_STORE_PASSWORD").get()
+                keyAlias = providers.gradleProperty("UNIREMOTE_KEY_ALIAS").get()
+                keyPassword = providers.gradleProperty("UNIREMOTE_KEY_PASSWORD").get()
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
