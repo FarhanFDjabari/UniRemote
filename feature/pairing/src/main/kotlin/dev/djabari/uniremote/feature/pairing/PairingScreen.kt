@@ -42,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import dev.djabari.uniremote.model.RemoteTarget
 import dev.djabari.uniremote.model.TvBrand
@@ -208,7 +209,9 @@ fun PairingScreen(
         item {
             Button(
                 onClick = { showAddDialog = true },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("pairing-add-tv"),
                 shape = RoundedCornerShape(16.dp),
             ) {
                 Icon(Icons.Default.Add, contentDescription = null)
@@ -304,7 +307,9 @@ private fun AddTargetDialog(
                     onValueChange = { name = it },
                     label = { Text("TV Name (e.g. Living Room TV)") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("pairing-tv-name"),
                 )
 
                 ExposedDropdownMenuBox(
@@ -319,7 +324,8 @@ private fun AddTargetDialog(
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                         modifier = Modifier
                             .menuAnchor()
-                            .fillMaxWidth(),
+                            .fillMaxWidth()
+                            .testTag("pairing-brand"),
                     )
                     ExposedDropdownMenu(
                         expanded = expanded,
@@ -342,7 +348,9 @@ private fun AddTargetDialog(
                     onValueChange = { ip = it },
                     label = { Text("IP Address (e.g. 192.168.1.50)") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("pairing-ip-address"),
                 )
 
                 OutlinedTextField(
@@ -350,13 +358,16 @@ private fun AddTargetDialog(
                     onValueChange = { mac = it },
                     label = { Text("MAC Address for WoL (optional)") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("pairing-mac-address"),
                 )
             }
         },
         confirmButton = {
             Button(
                 onClick = { onAdd(name, selectedBrand, ip.ifBlank { null }, mac.ifBlank { null }) },
+                modifier = Modifier.testTag("pairing-add-and-connect"),
             ) {
                 Text("Add & Connect")
             }

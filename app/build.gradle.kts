@@ -16,11 +16,13 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         release {
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -74,4 +76,10 @@ dependencies {
 
     // Screenshot-test scaffolding constructs the PairingViewModel dependencies directly.
     testImplementation(project(":transport:network"))
+
+    androidTestImplementation(platform(libs.compose.bom))
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.compose.ui.test.junit4)
+    androidTestImplementation(project(":transport:network"))
 }

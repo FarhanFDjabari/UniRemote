@@ -54,17 +54,18 @@ class NetworkTransportTest {
     )
 
     @Test
-    fun `supports an unlabelled target only when it has an IP to identify`() {
+    fun `supports an unlabelled target when it can identify by IP or wake by MAC`() {
         val roku = FakeAdapter(TvBrand.ROKU, identifyResult = true)
         val tizen = FakeAdapter(TvBrand.SAMSUNG_TIZEN)
         val transport = NetworkTransport(listOf(roku, tizen))
 
         assertThat(transport.supports(target(brand = TvBrand.GENERIC, ip = "192.168.1.50"))).isTrue()
         assertThat(transport.supports(target(brand = TvBrand.UNKNOWN, ip = "192.168.1.50"))).isTrue()
-        assertThat(transport.supports(target(brand = TvBrand.GENERIC, ip = null, mac = "AA:BB:CC:DD:EE:FF"))).isFalse()
+        assertThat(transport.supports(target(brand = TvBrand.GENERIC, ip = null, mac = "AA:BB:CC:DD:EE:FF"))).isTrue()
         assertThat(transport.supports(target(brand = TvBrand.GENERIC, ip = null))).isFalse()
         assertThat(transport.supports(target(brand = TvBrand.ROKU))).isTrue()
         assertThat(transport.supports(target(brand = TvBrand.ROKU, ip = null, mac = "AA:BB:CC:DD:EE:FF"))).isTrue()
+        assertThat(transport.supports(target(brand = TvBrand.UNKNOWN, ip = null, mac = "AA:BB:CC:DD:EE:FF"))).isTrue()
         assertThat(transport.supports(target(brand = TvBrand.UNKNOWN, ip = null))).isFalse()
     }
 
@@ -122,11 +123,36 @@ class NetworkTransportTest {
     }
 
     @Test
-    fun `a GENERIC target without an IP cannot be identified at all`() = runTest {
+    fun `a MAC-only GENERIC target connects as a WoL-only target`() = runTest {
+        val roku = FakeAdapter(TvBrand.ROKU, identifyResult = true)
+        var sentMac: String? = null
+        val transport = NetworkTransport(
+            adapters = listOf(roku),
+            sendWakeOnLan = { mac ->
+                sentMac = mac
+                Result.success(Unit)
+            },
+        )
+
+        val result = transport.connect(target(brand = TvBrand.GENERIC, ip = null, mac = "AA:BB:CC:DD:EE:FF"))
+
+        assertThat(result.isSuccess).isTrue()
+        assertThat(roku.identifyCalls).isEqualTo(0)
+        assertThat(roku.connectCalls).isEqualTo(0)
+        assertThat(transport.capabilities.value).containsExactly(TransportCapability.POWER_ON)
+
+        val wakeResult = transport.sendKey(RemoteKey.POWER_ON)
+
+        assertThat(wakeResult.isSuccess).isTrue()
+        assertThat(sentMac).isEqualTo("AA:BB:CC:DD:EE:FF")
+    }
+
+    @Test
+    fun `a MAC-less GENERIC target without an IP cannot be identified`() = runTest {
         val roku = FakeAdapter(TvBrand.ROKU, identifyResult = true)
         val transport = NetworkTransport(listOf(roku))
 
-        val result = transport.connect(target(brand = TvBrand.GENERIC, ip = null, mac = "AA:BB:CC:DD:EE:FF"))
+        val result = transport.connect(target(brand = TvBrand.GENERIC, ip = null))
 
         assertThat(result.isFailure).isTrue()
         assertThat(roku.identifyCalls).isEqualTo(0)

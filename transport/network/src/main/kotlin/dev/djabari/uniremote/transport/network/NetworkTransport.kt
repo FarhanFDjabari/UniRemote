@@ -10,6 +10,7 @@ import dev.djabari.uniremote.transport.RemoteTransport
 import dev.djabari.uniremote.transport.TransportCapability
 import dev.djabari.uniremote.transport.TransportError
 import dev.djabari.uniremote.transport.TransportState
+import dev.djabari.uniremote.transport.network.wol.WakeOnLan
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,9 +28,14 @@ import kotlinx.coroutines.flow.asStateFlow
  * through [BrandAdapter.identify] — silent and side-effect free — and only the adapter
  * that answers it gets the connection. Failures surface as [TransportError.UNSUPPORTED_TARGET]
  * so the caller can ask the user to pick a brand instead of guessing.
+ *
+ * An unlabelled target with only a MAC address is an exception: it is a deliberate
+ * Wake-on-LAN-only setup. It connects without probing a brand adapter and exposes only
+ * [TransportCapability.POWER_ON].
  */
 class NetworkTransport(
     private val adapters: List<BrandAdapter>,
+    private val sendWakeOnLan: suspend (String) -> Result<Unit> = WakeOnLan::send,
 ) : RemoteTransport {
 
     override val id = TransportId.NETWORK
@@ -50,8 +56,9 @@ class NetworkTransport(
     override fun supports(target: RemoteTarget): Boolean {
         if (target.ipAddress == null && target.macAddress == null) return false
         return if (target.brand.isUnlabelled) {
-            // Only a silent, IP-based identification can route an unlabelled TV.
-            target.ipAddress != null
+            // A MAC-only entry is intentionally limited to Wake-on-LAN; otherwise an
+            // unlabelled target must be identified silently by IP before it is routed.
+            target.isWakeOnLanOnly || target.ipAddress != null
         } else {
             adapters.any { it.brand == target.brand }
         }
@@ -61,6 +68,14 @@ class NetworkTransport(
         resolved = null
         currentTarget = target
         _state.value = TransportState.Connecting(target)
+
+        if (target.isWakeOnLanOnly) {
+            activeAdapter?.disconnect()
+            activeAdapter = null
+            _capabilities.value = setOf(TransportCapability.POWER_ON)
+            _state.value = TransportState.Connected(target)
+            return Result.success(Unit)
+        }
 
         val adapter = resolveAdapter(target) ?: run {
             _state.value = TransportState.Failed(TransportError.UNSUPPORTED_TARGET)
@@ -114,18 +129,20 @@ class NetworkTransport(
     }
 
     override suspend fun sendKey(key: RemoteKey, action: KeyAction): Result<Unit> {
-        val adapter = activeAdapter
-            ?: return Result.failure(IllegalStateException("No connected network adapter"))
-
         // Special handling for Power On via Wake-on-LAN
         if (key == RemoteKey.POWER_ON) {
             val mac = currentTarget?.macAddress
             return if (mac != null) {
-                adapter.wakeOnLan(mac)
+                // A MAC-only unlabelled target has no protocol adapter; all other targets
+                // preserve their adapter-specific WoL implementation.
+                activeAdapter?.wakeOnLan(mac) ?: sendWakeOnLan(mac)
             } else {
                 Result.failure(IllegalArgumentException("POWER_ON requires a MAC address for Wake-on-LAN"))
             }
         }
+
+        val adapter = activeAdapter
+            ?: return Result.failure(IllegalStateException("No connected network adapter"))
 
         return adapter.send(key)
     }
@@ -168,3 +185,7 @@ interface BrandAdapter {
 /** A TV whose ecosystem is not yet known cannot be routed without a silent probe. */
 private val TvBrand.isUnlabelled: Boolean
     get() = this == TvBrand.GENERIC || this == TvBrand.UNKNOWN
+
+/** A no-IP unlabelled target can only be reached by broadcasting a WoL magic packet. */
+private val RemoteTarget.isWakeOnLanOnly: Boolean
+    get() = brand.isUnlabelled && ipAddress == null && macAddress != null
