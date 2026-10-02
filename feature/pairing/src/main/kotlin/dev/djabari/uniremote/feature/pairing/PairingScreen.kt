@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import dev.djabari.uniremote.model.RemoteTarget
 import dev.djabari.uniremote.model.TvBrand
 import dev.djabari.uniremote.transport.TransportState
+import dev.djabari.uniremote.transport.userMessage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -96,7 +97,7 @@ fun PairingScreen(
                                     is TransportState.Connecting -> "Connecting to ${state.target.displayName}..."
                                     is TransportState.AwaitingHost -> "Waiting for TV to connect..."
                                     is TransportState.Preparing -> "Preparing Bluetooth HID..."
-                                    is TransportState.Failed -> "Error: ${state.reason}"
+                                    is TransportState.Failed -> "Couldn't connect"
                                     is TransportState.Idle -> "No TV Connected"
                                 },
                                 style = MaterialTheme.typography.titleMedium,
@@ -104,6 +105,13 @@ fun PairingScreen(
                             if (connection is TransportState.AwaitingHost) {
                                 Text(
                                     text = "On your TV: go to Settings > Remotes & Accessories > Add Accessory",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.padding(top = 4.dp),
+                                )
+                            }
+                            (connection as? TransportState.Failed)?.let { failed ->
+                                Text(
+                                    text = failed.reason.userMessage,
                                     style = MaterialTheme.typography.bodySmall,
                                     modifier = Modifier.padding(top = 4.dp),
                                 )

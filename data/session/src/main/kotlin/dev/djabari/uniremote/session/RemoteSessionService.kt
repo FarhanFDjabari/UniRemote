@@ -20,6 +20,7 @@ import androidx.core.app.NotificationCompat
 import dev.djabari.uniremote.common.PermissionUtils
 import dev.djabari.uniremote.transport.TransportState
 import dev.djabari.uniremote.transport.bthid.RealHidDeviceProxy
+import dev.djabari.uniremote.transport.userMessage
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -148,13 +149,14 @@ class RemoteSessionService : Service() {
             is TransportState.Connecting -> "Connecting to ${state.target.displayName}..."
             is TransportState.AwaitingHost -> "Waiting for TV to connect..."
             is TransportState.Preparing -> "Preparing Bluetooth HID..."
-            is TransportState.Failed -> "Connection failed: ${state.reason}"
+            is TransportState.Failed -> state.reason.userMessage
             is TransportState.Idle -> "Ready to connect"
         }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("UniRemote")
             .setContentText(statusText)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(statusText))
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setOngoing(state is TransportState.Connected || state is TransportState.Connecting)
             .addAction(
