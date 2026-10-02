@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Delete
@@ -47,11 +48,14 @@ import androidx.compose.ui.unit.dp
 import dev.djabari.uniremote.model.RemoteTarget
 import dev.djabari.uniremote.model.TvBrand
 import dev.djabari.uniremote.transport.TransportState
+import dev.djabari.uniremote.transport.userMessage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PairingScreen(
     viewModel: PairingViewModel,
+    onOpenGuide: () -> Unit = {},
+    onOpenLicenses: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val connection by viewModel.connection.collectAsState()
@@ -96,7 +100,7 @@ fun PairingScreen(
                                     is TransportState.Connecting -> "Connecting to ${state.target.displayName}..."
                                     is TransportState.AwaitingHost -> "Waiting for TV to connect..."
                                     is TransportState.Preparing -> "Preparing Bluetooth HID..."
-                                    is TransportState.Failed -> "Error: ${state.reason}"
+                                    is TransportState.Failed -> "Couldn't connect"
                                     is TransportState.Idle -> "No TV Connected"
                                 },
                                 style = MaterialTheme.typography.titleMedium,
@@ -104,6 +108,13 @@ fun PairingScreen(
                             if (connection is TransportState.AwaitingHost) {
                                 Text(
                                     text = "On your TV: go to Settings > Remotes & Accessories > Add Accessory",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.padding(top = 4.dp),
+                                )
+                            }
+                            (connection as? TransportState.Failed)?.let { failed ->
+                                Text(
+                                    text = failed.reason.userMessage,
                                     style = MaterialTheme.typography.bodySmall,
                                     modifier = Modifier.padding(top = 4.dp),
                                 )
@@ -119,6 +130,21 @@ fun PairingScreen(
                         }
                     }
                 }
+            }
+        }
+
+        // Connection Guide Entry
+        item {
+            OutlinedButton(
+                onClick = onOpenGuide,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("pairing-open-guide"),
+            ) {
+                Icon(Icons.AutoMirrored.Filled.HelpOutline, contentDescription = null)
+                Spacer(modifier = Modifier.size(8.dp))
+                Text("How to connect your TV")
             }
         }
 
@@ -217,6 +243,18 @@ fun PairingScreen(
                 Icon(Icons.Default.Add, contentDescription = null)
                 Spacer(modifier = Modifier.size(8.dp))
                 Text("Add TV by IP / Brand (Wi-Fi)")
+            }
+        }
+
+        // Open-source Licenses Entry
+        item {
+            TextButton(
+                onClick = onOpenLicenses,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("pairing-open-licenses"),
+            ) {
+                Text("Open-source licenses")
             }
         }
     }

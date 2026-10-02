@@ -35,4 +35,19 @@ class PointerAccumulatorTest {
         val afterReset = accumulator.add(0.4f, 0.4f, 1.0f)
         assertThat(afterReset).isNull()
     }
+
+    @Test
+    fun `acceleration is the same on both axes for a diagonal move`() {
+        accumulator.reset()
+        val diagonal = accumulator.add(30f, 30f, sensitivity = 1.0f)
+
+        accumulator.reset()
+        val singleAxis = accumulator.add(30f, 0f, sensitivity = 1.0f)
+
+        assertThat(diagonal).isNotNull()
+        assertThat(singleAxis).isNotNull()
+        assertThat(diagonal!!.dx).isEqualTo(diagonal.dy)
+        // Diagonal movement is faster overall, so it earns a larger acceleration factor.
+        assertThat(singleAxis!!.dx).isLessThan(diagonal.dx)
+    }
 }

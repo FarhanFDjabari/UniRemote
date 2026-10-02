@@ -91,3 +91,16 @@ enum class TransportError {
     UNSUPPORTED_TARGET,
     UNKNOWN,
 }
+
+/** Plain-language explanation of a failure with the next step to take, for the UI and notification. */
+val TransportError.userMessage: String
+    get() = when (this) {
+        TransportError.BLUETOOTH_DISABLED -> "Bluetooth is off. Turn it on and try again."
+        TransportError.PERMISSION_DENIED -> "UniRemote needs the Nearby devices permission to use Bluetooth. Allow it in Settings, then try again."
+        TransportError.HID_REGISTRATION_FAILED -> "Couldn't start Bluetooth remote mode. Another app may be using this phone as a Bluetooth keyboard or mouse (for example \"Bluetooth Keyboard & Mouse\"). Close or force-stop it, then try again."
+        TransportError.HOST_REJECTED -> "The TV didn't accept the connection. On the TV, remove this phone from its Bluetooth devices, then pair again from Settings > Remotes & Accessories while UniRemote is open."
+        TransportError.CONNECTION_LOST -> "Lost the connection to the TV. Make sure it's on and in range, then try again."
+        TransportError.TARGET_UNREACHABLE -> "Couldn't reach the TV. Make sure it's on and nearby, or on the same Wi-Fi, then try again."
+        TransportError.UNSUPPORTED_TARGET -> "This TV can't be controlled this way. Pair it over Bluetooth, or add it by IP with its brand."
+        TransportError.UNKNOWN -> "Something went wrong. Try again."
+    }

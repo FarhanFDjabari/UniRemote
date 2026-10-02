@@ -1,5 +1,6 @@
 package dev.djabari.uniremote
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,6 +37,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,6 +47,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import dev.djabari.uniremote.feature.keyboard.KeyboardScreen
 import dev.djabari.uniremote.feature.keyboard.KeyboardViewModel
+import dev.djabari.uniremote.feature.pairing.ConnectionGuideScreen
 import dev.djabari.uniremote.feature.pairing.PairingScreen
 import dev.djabari.uniremote.feature.pairing.PairingViewModel
 import dev.djabari.uniremote.feature.remote.RemoteScreen
@@ -66,6 +69,9 @@ enum class RemoteDestination(
     PAIRING("Pairing", Icons.Default.Bluetooth),
 }
 
+/** Full-screen pages opened on top of the destination layout. */
+private enum class Overlay { GUIDE, LICENSES }
+
 /**
  * @param layout The layout regime. Injected so tests and previews can pin a regime; real
  *   callers get the window-derived [rememberRemoteLayout].
@@ -81,43 +87,60 @@ fun UniRemoteApp(
     layout: RemoteLayout = rememberRemoteLayout(),
 ) {
     var currentDestination by remember { mutableStateOf(RemoteDestination.REMOTE) }
+    var overlay by rememberSaveable { mutableStateOf<Overlay?>(null) }
     val connection by remoteViewModel.connection.collectAsState()
+
+    BackHandler(enabled = overlay != null) { overlay = null }
 
     UniRemoteTheme {
         Surface(
             modifier = modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background,
         ) {
-            when (layout) {
-                RemoteLayout.COMPACT -> CompactScaffold(
-                    currentDestination = currentDestination,
-                    onDestinationSelected = { currentDestination = it },
-                    connection = connection,
-                    remoteViewModel = remoteViewModel,
-                    touchpadViewModel = touchpadViewModel,
-                    keyboardViewModel = keyboardViewModel,
-                    pairingViewModel = pairingViewModel,
-                )
-                RemoteLayout.MEDIUM -> MediumScaffold(
-                    currentDestination = currentDestination,
-                    onDestinationSelected = { currentDestination = it },
-                    connection = connection,
-                    remoteViewModel = remoteViewModel,
-                    touchpadViewModel = touchpadViewModel,
-                    keyboardViewModel = keyboardViewModel,
-                    pairingViewModel = pairingViewModel,
-                )
-                RemoteLayout.EXPANDED -> ExpandedScaffold(
-                    connection = connection,
-                    remoteViewModel = remoteViewModel,
-                    touchpadViewModel = touchpadViewModel,
-                    keyboardViewModel = keyboardViewModel,
-                    pairingViewModel = pairingViewModel,
-                )
-                RemoteLayout.TABLETOP -> TabletopScaffold(
-                    remoteViewModel = remoteViewModel,
-                    touchpadViewModel = touchpadViewModel,
-                )
+            val currentOverlay = overlay
+            if (currentOverlay != null) {
+                when (currentOverlay) {
+                    Overlay.GUIDE -> ConnectionGuideScreen(onBack = { overlay = null })
+                    Overlay.LICENSES -> OpenSourceLicensesScreen(onBack = { overlay = null })
+                }
+            } else {
+                when (layout) {
+                    RemoteLayout.COMPACT -> CompactScaffold(
+                        currentDestination = currentDestination,
+                        onDestinationSelected = { currentDestination = it },
+                        connection = connection,
+                        remoteViewModel = remoteViewModel,
+                        touchpadViewModel = touchpadViewModel,
+                        keyboardViewModel = keyboardViewModel,
+                        pairingViewModel = pairingViewModel,
+                        onOpenGuide = { overlay = Overlay.GUIDE },
+                        onOpenLicenses = { overlay = Overlay.LICENSES },
+                    )
+                    RemoteLayout.MEDIUM -> MediumScaffold(
+                        currentDestination = currentDestination,
+                        onDestinationSelected = { currentDestination = it },
+                        connection = connection,
+                        remoteViewModel = remoteViewModel,
+                        touchpadViewModel = touchpadViewModel,
+                        keyboardViewModel = keyboardViewModel,
+                        pairingViewModel = pairingViewModel,
+                        onOpenGuide = { overlay = Overlay.GUIDE },
+                        onOpenLicenses = { overlay = Overlay.LICENSES },
+                    )
+                    RemoteLayout.EXPANDED -> ExpandedScaffold(
+                        connection = connection,
+                        remoteViewModel = remoteViewModel,
+                        touchpadViewModel = touchpadViewModel,
+                        keyboardViewModel = keyboardViewModel,
+                        pairingViewModel = pairingViewModel,
+                        onOpenGuide = { overlay = Overlay.GUIDE },
+                        onOpenLicenses = { overlay = Overlay.LICENSES },
+                    )
+                    RemoteLayout.TABLETOP -> TabletopScaffold(
+                        remoteViewModel = remoteViewModel,
+                        touchpadViewModel = touchpadViewModel,
+                    )
+                }
             }
         }
     }
@@ -133,6 +156,8 @@ private fun CompactScaffold(
     touchpadViewModel: TouchpadViewModel,
     keyboardViewModel: KeyboardViewModel,
     pairingViewModel: PairingViewModel,
+    onOpenGuide: () -> Unit,
+    onOpenLicenses: () -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -173,7 +198,11 @@ private fun CompactScaffold(
                 RemoteDestination.REMOTE -> RemoteScreen(remoteViewModel)
                 RemoteDestination.TOUCHPAD -> TouchpadScreen(touchpadViewModel)
                 RemoteDestination.KEYBOARD -> KeyboardScreen(keyboardViewModel)
-                RemoteDestination.PAIRING -> PairingScreen(pairingViewModel)
+                RemoteDestination.PAIRING -> PairingScreen(
+                    viewModel = pairingViewModel,
+                    onOpenGuide = onOpenGuide,
+                    onOpenLicenses = onOpenLicenses,
+                )
             }
         }
     }
@@ -188,6 +217,8 @@ private fun MediumScaffold(
     touchpadViewModel: TouchpadViewModel,
     keyboardViewModel: KeyboardViewModel,
     pairingViewModel: PairingViewModel,
+    onOpenGuide: () -> Unit,
+    onOpenLicenses: () -> Unit,
 ) {
     Row(modifier = Modifier.fillMaxSize()) {
         NavigationRail(
@@ -226,7 +257,11 @@ private fun MediumScaffold(
             when (currentDestination) {
                 RemoteDestination.TOUCHPAD -> TouchpadScreen(touchpadViewModel)
                 RemoteDestination.KEYBOARD -> KeyboardScreen(keyboardViewModel)
-                RemoteDestination.PAIRING -> PairingScreen(pairingViewModel)
+                RemoteDestination.PAIRING -> PairingScreen(
+                    viewModel = pairingViewModel,
+                    onOpenGuide = onOpenGuide,
+                    onOpenLicenses = onOpenLicenses,
+                )
                 RemoteDestination.REMOTE -> TouchpadScreen(touchpadViewModel)
             }
         }
@@ -240,6 +275,8 @@ private fun ExpandedScaffold(
     touchpadViewModel: TouchpadViewModel,
     keyboardViewModel: KeyboardViewModel,
     pairingViewModel: PairingViewModel,
+    onOpenGuide: () -> Unit,
+    onOpenLicenses: () -> Unit,
 ) {
     Row(modifier = Modifier.fillMaxSize()) {
         // Pane 1: Connection status & target management
@@ -258,7 +295,11 @@ private fun ExpandedScaffold(
                 Text("UniRemote", style = MaterialTheme.typography.titleMedium)
                 ConnectionStatusBadge(connection)
             }
-            PairingScreen(pairingViewModel)
+            PairingScreen(
+                viewModel = pairingViewModel,
+                onOpenGuide = onOpenGuide,
+                onOpenLicenses = onOpenLicenses,
+            )
         }
 
         // Pane 2: D-pad & Remote Keys

@@ -108,6 +108,7 @@ class DefaultRemoteSession @Inject constructor(
         }
 
         var lastError: Throwable? = null
+        var failureReason: TransportError? = null
         for (transport in candidates) {
             _activeTransport.value = transport
             val result = transport.connect(target)
@@ -120,12 +121,17 @@ class DefaultRemoteSession @Inject constructor(
                 return Result.success(Unit)
             } else {
                 lastError = result.exceptionOrNull()
+                // The first candidate is the highest-priority transport, so its reason is the
+                // most useful diagnostic (e.g. BT HID registration held by another app).
+                if (failureReason == null) {
+                    failureReason = (transport.state.value as? TransportState.Failed)?.reason
+                }
             }
         }
 
         _activeTransport.value = null
         val finalError = lastError ?: IllegalStateException("Connection failed on all candidates")
-        _state.value = TransportState.Failed(TransportError.TARGET_UNREACHABLE, finalError)
+        _state.value = TransportState.Failed(failureReason ?: TransportError.TARGET_UNREACHABLE, finalError)
         return Result.failure(finalError)
     }
 
