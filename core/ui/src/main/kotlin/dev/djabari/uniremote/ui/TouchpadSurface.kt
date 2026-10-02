@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import dev.djabari.uniremote.model.PointerDelta
 import kotlin.math.abs
+import kotlin.math.hypot
 
 /**
  * Touchpad surface supporting multi-touch gestures:
@@ -45,11 +46,10 @@ fun TouchpadSurface(
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
             .pointerInput(sensitivity) {
                 awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
+                    awaitFirstDown(requireUnconsumed = false)
                     val startTime = System.currentTimeMillis()
                     var maxPointers = 1
                     var totalDragDistance = 0f
-                    var lastPosition = down.position
                     var isDrag = false
 
                     accumulator.reset()
@@ -81,8 +81,7 @@ fun TouchpadSurface(
 
                         if (activePointers.size == 1) {
                             val change = activePointers.first()
-                            val delta = change.position - lastPosition
-                            lastPosition = change.position
+                            val delta = change.position - change.previousPosition
                             totalDragDistance += delta.getDistance()
 
                             if (totalDragDistance > 10f) {
@@ -129,8 +128,9 @@ class PointerAccumulator {
     private var remY = 0f
 
     fun add(dx: Float, dy: Float, sensitivity: Float): PointerDelta? {
-        remX += dx * accelerate(dx, sensitivity)
-        remY += dy * accelerate(dy, sensitivity)
+        val factor = accelerate(hypot(dx, dy), sensitivity)
+        remX += dx * factor
+        remY += dy * factor
 
         val outX = remX.toInt()
         val outY = remY.toInt()
@@ -147,8 +147,6 @@ class PointerAccumulator {
     }
 
     /** Mild quadratic acceleration: precise when slow, fast when flicked. */
-    private fun accelerate(delta: Float, sensitivity: Float): Float {
-        val speed = abs(delta)
-        return sensitivity * (1f + speed / 24f).coerceAtMost(3f)
-    }
+    private fun accelerate(speed: Float, sensitivity: Float): Float =
+        sensitivity * (1f + speed / 24f).coerceAtMost(3f)
 }

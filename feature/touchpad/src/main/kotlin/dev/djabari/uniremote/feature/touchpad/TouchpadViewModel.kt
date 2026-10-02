@@ -10,7 +10,6 @@ import dev.djabari.uniremote.transport.TransportCapability
 import dev.djabari.uniremote.transport.TransportState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,11 +30,11 @@ class TouchpadViewModel @Inject constructor(
     val sensitivity: StateFlow<Float> = _sensitivity.asStateFlow()
 
     /**
-     * Conflated channel to ensure we never overwhelm the Bluetooth HID report buffer.
-     * Motion reports flush at ~60-100Hz cadence. CONFLATED already implies
-     * DROP_OLDEST — passing an explicit overflow policy is illegal and throws.
+     * Sums motion between flushes so no relative movement is lost; conflating or dropping
+     * deltas would make the cursor stutter and under-travel. The 12 ms flush cadence below
+     * keeps the Bluetooth HID report buffer fed without overwhelming it.
      */
-    private val deltaChannel = Channel<PointerDelta>(capacity = Channel.CONFLATED)
+    private val motion = MotionBuffer()
 
     init {
         // Off the main dispatcher deliberately: this poll never stops while the ViewModel
@@ -44,16 +43,13 @@ class TouchpadViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.Default) {
             while (isActive) {
                 delay(12) // ~83 Hz cadence
-                val delta = deltaChannel.tryReceive().getOrNull()
-                if (delta != null && !delta.isIdle) {
-                    session.pointer(PointerEvent.Move(delta))
-                }
+                motion.drain()?.let { session.pointer(PointerEvent.Move(it)) }
             }
         }
     }
 
     fun onPointerDelta(delta: PointerDelta) {
-        deltaChannel.trySend(delta)
+        motion.add(delta)
     }
 
     fun onTap() = viewModelScope.launch {
