@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Delete
@@ -53,6 +54,8 @@ import dev.djabari.uniremote.transport.userMessage
 @Composable
 fun PairingScreen(
     viewModel: PairingViewModel,
+    onOpenGuide: () -> Unit = {},
+    onOpenLicenses: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val connection by viewModel.connection.collectAsState()
@@ -127,6 +130,21 @@ fun PairingScreen(
                         }
                     }
                 }
+            }
+        }
+
+        // Connection Guide Entry
+        item {
+            OutlinedButton(
+                onClick = onOpenGuide,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("pairing-open-guide"),
+            ) {
+                Icon(Icons.AutoMirrored.Filled.HelpOutline, contentDescription = null)
+                Spacer(modifier = Modifier.size(8.dp))
+                Text("How to connect your TV")
             }
         }
 
@@ -225,6 +243,18 @@ fun PairingScreen(
                 Icon(Icons.Default.Add, contentDescription = null)
                 Spacer(modifier = Modifier.size(8.dp))
                 Text("Add TV by IP / Brand (Wi-Fi)")
+            }
+        }
+
+        // Open-source Licenses Entry
+        item {
+            TextButton(
+                onClick = onOpenLicenses,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("pairing-open-licenses"),
+            ) {
+                Text("Open-source licenses")
             }
         }
     }

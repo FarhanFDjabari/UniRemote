@@ -7,6 +7,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
 import dev.djabari.uniremote.feature.keyboard.KeyboardViewModel
+import dev.djabari.uniremote.feature.pairing.ConnectionGuideScreen
 import dev.djabari.uniremote.feature.pairing.PairingViewModel
 import dev.djabari.uniremote.feature.remote.RemoteViewModel
 import dev.djabari.uniremote.feature.touchpad.TouchpadViewModel
@@ -19,6 +20,7 @@ import dev.djabari.uniremote.transport.TransportState
 import dev.djabari.uniremote.transport.network.discovery.MdnsDiscovery
 import dev.djabari.uniremote.transport.network.discovery.NetworkDiscovery
 import dev.djabari.uniremote.ui.RemoteLayout
+import dev.djabari.uniremote.ui.theme.UniRemoteTheme
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -121,4 +123,22 @@ class UniRemoteAppScreenshotTest {
     @Test
     @Config(qualifiers = "w411dp-h891dp-mdpi")
     fun tabletop_connected() = capture(RemoteLayout.TABLETOP, connected = true)
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-mdpi")
+    fun connection_guide_compact() {
+        composeRule.setContent {
+            UniRemoteTheme { ConnectionGuideScreen(onBack = {}) }
+        }
+        composeRule.onRoot().captureRoboImage("src/test/roborazzi/ConnectionGuide_compact.png")
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-mdpi")
+    fun open_source_licenses_compact() {
+        composeRule.setContent {
+            UniRemoteTheme { OpenSourceLicensesScreen(onBack = {}) }
+        }
+        composeRule.onRoot().captureRoboImage("src/test/roborazzi/OpenSourceLicenses_compact.png")
+    }
 }
