@@ -9,6 +9,7 @@ import dev.djabari.uniremote.model.TransportId
 import dev.djabari.uniremote.model.TvBrand
 import dev.djabari.uniremote.transport.RemoteTransport
 import dev.djabari.uniremote.transport.TransportCapability
+import dev.djabari.uniremote.transport.TransportError
 import dev.djabari.uniremote.transport.TransportState
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -31,6 +32,7 @@ class DefaultRemoteSessionTest {
         private val transportCapabilities: Set<TransportCapability> = emptySet(),
         private val connectDelayMs: Long = 0,
         private val resolved: RemoteTarget? = null,
+        private val failureReason: TransportError? = null,
     ) : RemoteTransport {
         var connectCount = 0
         var disconnectCount = 0
@@ -51,7 +53,7 @@ class DefaultRemoteSessionTest {
                 _state.value = TransportState.Connected(target)
                 _capabilities.value = transportCapabilities
             } else {
-                _state.value = TransportState.Idle
+                _state.value = failureReason?.let { TransportState.Failed(it) } ?: TransportState.Idle
             }
             return connectResult
         }
@@ -143,6 +145,38 @@ class DefaultRemoteSessionTest {
 
         assertThat(result.isFailure).isTrue()
         assertThat(session.state.value).isInstanceOf(TransportState.Failed::class.java)
+    }
+
+    @Test
+    fun `surfaces the preferred transport's failure reason when every transport fails`() = runTest {
+        val bt = FakeTransport(
+            TransportId.BLUETOOTH_HID,
+            Result.failure(IllegalStateException("another app holds the HID registration")),
+            failureReason = TransportError.HID_REGISTRATION_FAILED,
+        )
+        val network = FakeTransport(
+            TransportId.NETWORK,
+            Result.failure(IllegalStateException("unreachable")),
+            failureReason = TransportError.TARGET_UNREACHABLE,
+        )
+        val session = DefaultRemoteSession(TransportSelector(listOf(bt, network)), FakeTargetStore(), backgroundScope)
+
+        session.connect(target)
+
+        val failed = session.state.value as TransportState.Failed
+        assertThat(failed.reason).isEqualTo(TransportError.HID_REGISTRATION_FAILED)
+    }
+
+    @Test
+    fun `falls back to TARGET_UNREACHABLE when no transport reports a reason`() = runTest {
+        val bt = FakeTransport(TransportId.BLUETOOTH_HID, Result.failure(IllegalStateException("refused")))
+        val network = FakeTransport(TransportId.NETWORK, Result.failure(IllegalStateException("unreachable")))
+        val session = DefaultRemoteSession(TransportSelector(listOf(bt, network)), FakeTargetStore(), backgroundScope)
+
+        session.connect(target)
+
+        val failed = session.state.value as TransportState.Failed
+        assertThat(failed.reason).isEqualTo(TransportError.TARGET_UNREACHABLE)
     }
 
     @Test
