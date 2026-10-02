@@ -158,8 +158,8 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      # The project has no release signing configuration. This validates the optimized
-      # release build and produces app-release-unsigned.apk for PR review.
+      # PR builds never see the release keystore; signed builds come from release.yml.
+      # This validates the optimized release build and produces an unsigned APK for review.
       - name: Assemble unsigned release APK
         run: ./gradlew --stacktrace assembleRelease
 
