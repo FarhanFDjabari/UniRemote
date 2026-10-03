@@ -156,6 +156,8 @@ class DefaultRemoteSession @Inject constructor(
         connectLocked(target)
     }
 
+    override suspend fun resetConnection(): Result<Unit> = reconnect()
+
     private suspend fun lastSavedTarget(): RemoteTarget? {
         val lastId = repository.lastConnectedTargetId.first() ?: return null
         return repository.savedTargets.first().firstOrNull { it.id == lastId }

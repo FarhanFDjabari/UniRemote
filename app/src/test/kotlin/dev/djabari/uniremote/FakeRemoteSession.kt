@@ -40,6 +40,7 @@ class FakeRemoteSession : RemoteSession {
 
     override suspend fun connect(target: RemoteTarget): Result<Unit> = Result.success(Unit)
     override suspend fun reconnect(): Result<Unit> = Result.success(Unit)
+    override suspend fun resetConnection(): Result<Unit> = Result.success(Unit)
     override suspend fun disconnect() = Unit
     override suspend fun press(key: RemoteKey, action: KeyAction): Result<Unit> = Result.success(Unit)
     override suspend fun type(text: String): Result<Unit> = Result.success(Unit)

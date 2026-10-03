@@ -98,6 +98,7 @@ fun PairingScreen(
                                 text = when (val state = connection) {
                                     is TransportState.Connected -> "Connected: ${state.target.displayName}"
                                     is TransportState.Connecting -> "Connecting to ${state.target.displayName}..."
+                                    is TransportState.Reconnecting -> "Reconnecting to ${state.target.displayName} (${state.attempt}/${state.maxAttempts})..."
                                     is TransportState.AwaitingHost -> "Waiting for TV to connect..."
                                     is TransportState.Preparing -> "Preparing Bluetooth HID..."
                                     is TransportState.Failed -> "Couldn't connect"

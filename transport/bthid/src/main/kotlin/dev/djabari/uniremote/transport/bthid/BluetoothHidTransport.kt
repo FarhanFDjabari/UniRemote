@@ -42,7 +42,7 @@ class BluetoothHidTransport(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     private val connectTimeoutMs: Long = CONNECT_TIMEOUT_MS,
     private val keepAliveIntervalMs: Long = KEEP_ALIVE_INTERVAL_MS,
-) : RemoteTransport {
+) : RemoteTransport, BluetoothLinkEvents {
 
     override val id = TransportId.BLUETOOTH_HID
 
@@ -280,6 +280,12 @@ class BluetoothHidTransport(
                 )
         }
     }
+
+    override fun onBluetoothDisabled() = Unit
+
+    override fun onBondRemoved(address: String) = Unit
+
+    override fun onAclDisconnected(address: String) = Unit
 
     /**
      * A registration held by a transport nobody is using blocks the next one: the framework

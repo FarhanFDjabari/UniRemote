@@ -147,6 +147,7 @@ class RemoteSessionService : Service() {
         val statusText = when (state) {
             is TransportState.Connected -> "Connected to ${state.target.displayName}"
             is TransportState.Connecting -> "Connecting to ${state.target.displayName}..."
+            is TransportState.Reconnecting -> "Connection lost. Reconnecting to ${state.target.displayName} (${state.attempt}/${state.maxAttempts})..."
             is TransportState.AwaitingHost -> "Waiting for TV to connect..."
             is TransportState.Preparing -> "Preparing Bluetooth HID..."
             is TransportState.Failed -> state.reason.userMessage
