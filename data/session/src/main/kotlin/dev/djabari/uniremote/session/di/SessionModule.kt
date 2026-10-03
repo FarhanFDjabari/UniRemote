@@ -4,12 +4,15 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import dev.djabari.uniremote.session.DefaultRemoteSession
+import dev.djabari.uniremote.session.BluetoothHidProfileManager
+import dev.djabari.uniremote.session.HidProfileController
 import dev.djabari.uniremote.session.RemoteSession
 import dev.djabari.uniremote.session.TargetRepository
 import dev.djabari.uniremote.session.TargetStore
 import dev.djabari.uniremote.session.TransportSelector
 import dev.djabari.uniremote.transport.RemoteTransport
 import dev.djabari.uniremote.transport.bthid.BluetoothHidTransport
+import dev.djabari.uniremote.transport.bthid.BluetoothLinkEvents
 import dev.djabari.uniremote.transport.bthid.RealHidDeviceProxy
 import dev.djabari.uniremote.transport.network.NetworkTransport
 import dagger.Binds
@@ -31,6 +34,10 @@ abstract class SessionModule {
     @Binds
     @Singleton
     abstract fun bindTargetStore(impl: TargetRepository): TargetStore
+
+    @Binds
+    @Singleton
+    abstract fun bindHidProfileController(impl: BluetoothHidProfileManager): HidProfileController
 
     companion object {
 
@@ -56,6 +63,10 @@ abstract class SessionModule {
             proxy: RealHidDeviceProxy,
             adapter: BluetoothAdapter?,
         ): BluetoothHidTransport = BluetoothHidTransport(proxy, adapter)
+
+        @Provides
+        @Singleton
+        fun provideBluetoothLinkEvents(transport: BluetoothHidTransport): BluetoothLinkEvents = transport
 
         @Provides
         @Singleton

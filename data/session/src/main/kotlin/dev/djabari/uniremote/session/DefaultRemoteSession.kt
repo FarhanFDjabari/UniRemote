@@ -14,6 +14,7 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,6 +30,7 @@ import javax.inject.Singleton
 class DefaultRemoteSession @Inject constructor(
     private val selector: TransportSelector,
     private val repository: TargetStore,
+    private val hidProfileController: HidProfileController,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
 ) : RemoteSession {
 
@@ -55,6 +57,8 @@ class DefaultRemoteSession @Inject constructor(
 
     private var stateObservationJob: Job? = null
     private var capsObservationJob: Job? = null
+    @Volatile
+    private var recoveryJob: Job? = null
 
     private val _state = MutableStateFlow<TransportState>(TransportState.Idle)
     override val state: StateFlow<TransportState> = _state.asStateFlow()
@@ -70,13 +74,19 @@ class DefaultRemoteSession @Inject constructor(
 
                 if (transport != null) {
                     stateObservationJob = launch {
-                        transport.state.collect { _state.value = it }
+                        transport.state.collect { state ->
+                            if (state is TransportState.Failed && state.reason == TransportError.CONNECTION_LOST) {
+                                _state.value = state
+                                scheduleRecovery(transport)
+                            } else if (recoveryJob?.isActive != true) {
+                                _state.value = state
+                            }
+                        }
                     }
                     capsObservationJob = launch {
                         transport.capabilities.collect { _capabilities.value = it }
                     }
                 } else {
-                    _state.value = TransportState.Idle
                     _capabilities.value = emptySet()
                 }
             }
@@ -84,6 +94,8 @@ class DefaultRemoteSession @Inject constructor(
     }
 
     override suspend fun connect(target: RemoteTarget): Result<Unit> {
+        recoveryJob?.cancel()
+        recoveryJob = null
         disconnectedByUser = false
         // Runs in the session scope, not the caller's: a connect must survive the screen
         // that started it going away, and must stay cancellable by [disconnect].
@@ -96,6 +108,30 @@ class DefaultRemoteSession @Inject constructor(
             Result.failure(IllegalStateException("Connection attempt was cancelled"))
         } finally {
             if (attempt === running) attempt = null
+        }
+    }
+
+    private fun scheduleRecovery(transport: RemoteTransport) {
+        val target = _activeTarget.value ?: return
+        if (disconnectedByUser || attempt?.isActive == true || connectionLock.isLocked || recoveryJob?.isActive == true || _activeTransport.value !== transport) return
+        recoveryJob = scope.launch {
+            for (attemptNumber in 1..AUTO_RECONNECT_ATTEMPTS) {
+                _state.value = TransportState.Reconnecting(target, attemptNumber, AUTO_RECONNECT_ATTEMPTS)
+                delay(AUTO_RECONNECT_DELAYS_MS[attemptNumber - 1])
+                val latestFailure = transport.state.value as? TransportState.Failed
+                if (latestFailure != null && latestFailure.reason in NON_RETRYABLE_ERRORS) {
+                    _state.value = latestFailure
+                    return@launch
+                }
+                val result = connectionLock.withLock { connectLocked(target) }
+                if (result.isSuccess) {
+                    _state.value = _activeTransport.value?.state?.value ?: transport.state.value
+                    return@launch
+                }
+                val finalState = _state.value as? TransportState.Failed
+                if (finalState?.reason in NON_RETRYABLE_ERRORS) return@launch
+            }
+            // connectLocked owns the final failure state; the mirror stays suppressed while this job runs.
         }
     }
 
@@ -156,7 +192,18 @@ class DefaultRemoteSession @Inject constructor(
         connectLocked(target)
     }
 
-    override suspend fun resetConnection(): Result<Unit> = reconnect()
+    override suspend fun resetConnection(): Result<Unit> {
+        recoveryJob?.cancel()
+        recoveryJob = null
+        disconnectedByUser = false
+        return connectionLock.withLock {
+            val target = _activeTarget.value ?: lastSavedTarget()
+                ?: return@withLock Result.failure(IllegalStateException("No target to reconnect to"))
+            _activeTransport.value?.disconnect()
+            hidProfileController.reopen()
+            connectLocked(target)
+        }
+    }
 
     private suspend fun lastSavedTarget(): RemoteTarget? {
         val lastId = repository.lastConnectedTargetId.first() ?: return null
@@ -164,6 +211,8 @@ class DefaultRemoteSession @Inject constructor(
     }
 
     override suspend fun disconnect() {
+        recoveryJob?.cancel()
+        recoveryJob = null
         disconnectedByUser = true
         // Cut off any attempt still waiting on a TV so the user is not stuck behind a
         // 15-second Bluetooth timeout after asking to disconnect.
@@ -196,5 +245,16 @@ class DefaultRemoteSession @Inject constructor(
         val transport = _activeTransport.value
             ?: return Result.failure(IllegalStateException("No active transport connected"))
         return transport.sendPointer(event)
+    }
+
+    companion object {
+        private const val AUTO_RECONNECT_ATTEMPTS = 3
+        private val AUTO_RECONNECT_DELAYS_MS = longArrayOf(2_000, 5_000, 10_000)
+        private val NON_RETRYABLE_ERRORS = setOf(
+            TransportError.BLUETOOTH_DISABLED,
+            TransportError.NOT_PAIRED,
+            TransportError.PERMISSION_DENIED,
+            TransportError.UNSUPPORTED_TARGET,
+        )
     }
 }
