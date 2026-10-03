@@ -58,8 +58,18 @@ class PairingViewModel @Inject constructor(
         session.connect(target)
     }
 
+    /** Reconnects to the active target, or falls back to the session's last-known target. */
+    fun retry() = viewModelScope.launch {
+        session.activeTarget.value?.let { session.connect(it) } ?: session.reconnect()
+    }
+
     fun disconnect() = viewModelScope.launch {
         session.disconnect()
+    }
+
+    /** Tears the Bluetooth stack down and reconnects from scratch, like a force-stop. */
+    fun resetConnection() = viewModelScope.launch {
+        session.resetConnection()
     }
 
     fun addManualTarget(
