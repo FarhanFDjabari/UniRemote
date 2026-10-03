@@ -16,6 +16,8 @@ import dev.djabari.uniremote.transport.RemoteTransport
 import dev.djabari.uniremote.transport.TransportCapability
 import dev.djabari.uniremote.transport.TransportError
 import dev.djabari.uniremote.transport.TransportState
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -24,7 +26,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -40,15 +41,12 @@ class BluetoothHidTransport(
     private val proxy: HidDeviceProxy,
     private val adapter: BluetoothAdapter? = null,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
-    private val connectTimeoutMs: Long = CONNECT_TIMEOUT_MS,
+    private val connectTimeoutMs: Long = ATTEMPT_TIMEOUT_MS,
     private val keepAliveIntervalMs: Long = KEEP_ALIVE_INTERVAL_MS,
 ) : RemoteTransport, BluetoothLinkEvents {
-
     override val id = TransportId.BLUETOOTH_HID
-
     private val _state = MutableStateFlow<TransportState>(TransportState.Idle)
     override val state: StateFlow<TransportState> = _state.asStateFlow()
-
     private val _capabilities = MutableStateFlow<Set<TransportCapability>>(emptySet())
     override val capabilities: StateFlow<Set<TransportCapability>> = _capabilities.asStateFlow()
 
@@ -64,6 +62,24 @@ class BluetoothHidTransport(
     @Volatile
     private var keepAliveJob: Job? = null
 
+    @Volatile
+    private var registrationSignal: CompletableDeferred<Boolean>? = null
+
+    @Volatile
+    private var unregisterSignal: CompletableDeferred<Unit>? = null
+
+    @Volatile
+    private var attemptSignal: CompletableDeferred<Boolean>? = null
+
+    @Volatile
+    private var attemptInFlight: Boolean = false
+
+    @Volatile
+    private var consecutiveWriteFailures: Int = 0
+
+    @Volatile
+    private var externalFailure: TransportError? = null
+
     /**
      * Serialises report writes. Prevents interleaving presses and releases which causes
      * stuck modifiers and uncontrolled repeat scrolling.
@@ -72,71 +88,41 @@ class BluetoothHidTransport(
 
     private val callback = object : BluetoothHidDevice.Callback() {
         override fun onAppStatusChanged(pluggedDevice: BluetoothDevice?, registered: Boolean) {
-            isAppRegistered = registered
             if (registered) {
-                val target = currentTarget
-                if (target != null) {
-                    val device = pluggedDevice ?: findBluetoothDevice(target.bluetoothAddress)
-                    if (device != null) {
-                        _state.value = TransportState.Connecting(target)
-                        proxy.connect(device)
-                    } else {
-                        _state.value = TransportState.AwaitingHost
-                    }
-                } else {
-                    _state.value = TransportState.AwaitingHost
-                }
+                isAppRegistered = true
+                registrationSignal?.complete(true)
             } else {
-                _capabilities.value = emptySet()
-                // Deregistration also happens as part of failing a connect; keep the reason.
-                if (_state.value !is TransportState.Failed) {
-                    _state.value = TransportState.Idle
+                if (unregisterSignal != null || registrationSignal?.isCompleted != true) {
+                    isAppRegistered = false
                 }
+                unregisterSignal?.complete(Unit)
             }
         }
 
         // Reached only from a live HID session, which cannot exist without BLUETOOTH_CONNECT.
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChanged(device: BluetoothDevice?, state: Int) {
-            val target = currentTarget ?: device?.let {
-                RemoteTarget(
-                    id = it.address,
-                    displayName = it.name ?: "TV (${it.address})",
-                    brand = dev.djabari.uniremote.model.TvBrand.GENERIC,
-                    bluetoothAddress = it.address,
-                )
-            }
-
+            val target = currentTarget ?: return
+            val expected = target.bluetoothAddress ?: return
+            if (device?.address != expected) return
             when (state) {
                 BluetoothProfile.STATE_CONNECTED -> {
                     connectedDevice = device
-                    if (target != null) {
-                        currentTarget = target
-                        _state.value = TransportState.Connected(target)
-                        _capabilities.value = HID_CAPABILITIES
-                        startKeepAlive()
-                    }
+                    consecutiveWriteFailures = 0
+                    _state.value = TransportState.Connected(target)
+                    _capabilities.value = HID_CAPABILITIES
+                    attemptInFlight = false
+                    attemptSignal?.complete(true)
+                    startKeepAlive()
                 }
                 BluetoothProfile.STATE_CONNECTING -> {
-                    if (target != null) {
+                    if (attemptInFlight) {
                         _state.value = TransportState.Connecting(target)
                     }
                 }
-                BluetoothProfile.STATE_DISCONNECTED -> {
-                    val wasConnected = connectedDevice != null
-                    stopKeepAlive()
-                    connectedDevice = null
-                    _capabilities.value = emptySet()
-                    if (wasConnected) {
-                        _state.value = TransportState.Failed(TransportError.CONNECTION_LOST)
-                    } else if (currentTarget != null) {
-                        _state.value = TransportState.AwaitingHost
-                    } else {
-                        _state.value = TransportState.Idle
-                    }
-                }
-                BluetoothProfile.STATE_DISCONNECTING -> {
-                    _capabilities.value = emptySet()
+                BluetoothProfile.STATE_DISCONNECTED -> when {
+                    connectedDevice != null -> handleLinkLoss(TransportError.CONNECTION_LOST)
+                    attemptInFlight -> attemptSignal?.complete(false)
                 }
             }
         }
@@ -145,89 +131,143 @@ class BluetoothHidTransport(
     override fun supports(target: RemoteTarget): Boolean =
         target.brand.acceptsBluetoothHid && target.bluetoothAddress != null
 
+    /**
+     * The HID link is established asynchronously by the framework. Report success only once
+     * the host is connected so the session can fall back when a TV silently refuses HID.
+     */
+    @SuppressLint("MissingPermission")
     override suspend fun connect(target: RemoteTarget): Result<Unit> {
-        if (!supports(target)) {
-            val error = TransportError.UNSUPPORTED_TARGET
-            _state.value = TransportState.Failed(error)
-            return Result.failure(IllegalArgumentException(error.name))
-        }
-
-        currentTarget = target
+        if (!supports(target)) return fail(TransportError.UNSUPPORTED_TARGET)
         _state.value = TransportState.Preparing
-
-        if (!proxy.awaitReady()) {
-            _state.value = TransportState.Failed(TransportError.HID_REGISTRATION_FAILED)
-            return Result.failure(IllegalStateException("Bluetooth HID profile is unavailable"))
+        val btAdapter: BluetoothAdapter
+        val device: BluetoothDevice
+        try {
+            btAdapter = adapter ?: return fail(TransportError.BLUETOOTH_DISABLED)
+            if (!btAdapter.isEnabled) return fail(TransportError.BLUETOOTH_DISABLED)
+            device = btAdapter.getRemoteDevice(target.bluetoothAddress!!)
+            if (device.bondState != BluetoothDevice.BOND_BONDED) return fail(TransportError.NOT_PAIRED)
+        } catch (_: SecurityException) {
+            return fail(TransportError.PERMISSION_DENIED)
+        } catch (_: IllegalArgumentException) {
+            return fail(TransportError.TARGET_UNREACHABLE)
         }
 
-        val registered = proxy.registerApp(callback)
-        // The framework holds the registration from the moment this returns true, whether or
-        // not the status callback ever arrives — track it here or a failed connect leaks it.
-        isAppRegistered = registered
-        if (!registered) {
-            val error = TransportError.HID_REGISTRATION_FAILED
-            _state.value = TransportState.Failed(error)
-            return Result.failure(IllegalStateException("HID registration failed on this device"))
+        // Clear the old link before switching targets so its disconnect callback is stale.
+        connectedDevice?.let { oldDevice ->
+            stopKeepAlive()
+            connectedDevice = null
+            _capabilities.value = emptySet()
+            proxy.disconnect(oldDevice)
         }
-
-        val device = findBluetoothDevice(target.bluetoothAddress)
-        if (device == null) {
+        currentTarget = target
+        externalFailure = null
+        try {
+            if (isAppRegistered) unregisterAndWait()
+            externalFailure?.let { return fail(it) }
+            if (!proxy.awaitReady()) return fail(TransportError.HID_REGISTRATION_FAILED)
+            externalFailure?.let { return fail(it) }
+            registrationSignal = CompletableDeferred()
+            var registered = proxy.registerApp(callback)
+            if (registered) isAppRegistered = true else {
+                // A stale framework registration can make the first call fail despite no local flag.
+                unregisterAndWait()
+                registrationSignal = CompletableDeferred()
+                registered = proxy.registerApp(callback)
+                if (registered) isAppRegistered = true
+            }
+            if (!registered) return fail(TransportError.HID_REGISTRATION_FAILED)
+            val registrationComplete = withTimeoutOrNull(REGISTER_TIMEOUT_MS) {
+                registrationSignal!!.await()
+            }
+            externalFailure?.let {
+                releaseRegistration()
+                return fail(it)
+            }
+            if (registrationComplete != true) {
+                releaseRegistration()
+                return fail(TransportError.HID_REGISTRATION_FAILED)
+            }
+            consecutiveWriteFailures = 0
+            repeat(CONNECT_ATTEMPTS) { index ->
+                attemptInFlight = true
+                attemptSignal = CompletableDeferred()
+                _state.value = TransportState.Connecting(target)
+                // The callback signals this attempt; connect() alone calls proxy.connect().
+                if (!proxy.connect(device)) attemptSignal?.complete(false)
+                val connected = withTimeoutOrNull(connectTimeoutMs) { attemptSignal!!.await() } == true
+                attemptInFlight = false
+                if (connected) return Result.success(Unit)
+                externalFailure?.let {
+                    releaseRegistration()
+                    currentTarget = null
+                    return fail(it)
+                }
+                if (index < CONNECT_ATTEMPTS - 1) {
+                    delay(RETRY_BACKOFF_MS * (index + 1))
+                    proxy.disconnect(device)
+                }
+            }
             releaseRegistration()
-            _state.value = TransportState.Failed(TransportError.TARGET_UNREACHABLE)
-            return Result.failure(IllegalStateException("No bonded Bluetooth device for ${target.bluetoothAddress}"))
-        }
-
-        _state.value = TransportState.Connecting(target)
-        proxy.connect(device)
-
-        // The HID link is established by the framework asynchronously. Report success only
-        // once the host is actually connected — otherwise the session can never fall back
-        // to the network transport for a TV that silently refuses the HID role.
-        val settled = withTimeoutOrNull(connectTimeoutMs) {
-            state.first { it is TransportState.Connected || it is TransportState.Failed }
-        }
-
-        return when (settled) {
-            is TransportState.Connected -> Result.success(Unit)
-            is TransportState.Failed -> {
-                releaseRegistration()
-                Result.failure(IllegalStateException(settled.reason.name))
-            }
-            else -> {
-                releaseRegistration()
-                _state.value = TransportState.Failed(TransportError.HOST_REJECTED)
-                Result.failure(IllegalStateException("TV did not accept the HID connection in time"))
-            }
+            // Clearing the target makes callbacks arriving after failure inert.
+            currentTarget = null
+            _state.value = TransportState.Failed(TransportError.HOST_REJECTED)
+            return Result.failure(IllegalStateException(TransportError.HOST_REJECTED.name))
+        } catch (cancelled: CancellationException) {
+            attemptInFlight = false
+            attemptSignal?.cancel()
+            attemptSignal = null
+            currentTarget = null
+            releaseRegistration()
+            throw cancelled
+        } catch (security: SecurityException) {
+            releaseRegistration()
+            return fail(TransportError.PERMISSION_DENIED)
         }
     }
 
+    private suspend fun unregisterAndWait() {
+        val signal = CompletableDeferred<Unit>()
+        unregisterSignal = signal
+        proxy.unregisterApp()
+        withTimeoutOrNull(UNREGISTER_TIMEOUT_MS) { signal.await() }
+        isAppRegistered = false
+        unregisterSignal = null
+    }
+
     override suspend fun disconnect() {
+        attemptInFlight = false
+        attemptSignal?.cancel()
+        attemptSignal = null
         stopKeepAlive()
-        releaseAll()
-        connectedDevice?.let { proxy.disconnect(it) }
+        val device = connectedDevice
         connectedDevice = null
         currentTarget = null
-        if (isAppRegistered) {
-            proxy.unregisterApp()
-            isAppRegistered = false
-        }
+        releaseAll(device)
+        device?.let { proxy.disconnect(it) }
+        consecutiveWriteFailures = 0
+        releaseRegistration()
         _capabilities.value = emptySet()
         _state.value = TransportState.Idle
     }
 
     override suspend fun sendKey(key: RemoteKey, action: KeyAction): Result<Unit> {
-        val binding = bindingFor(key)
-            ?: return Result.failure(IllegalArgumentException("$key has no HID binding"))
+        val binding = bindingFor(key) ?: return Result.failure(IllegalArgumentException("$key has no HID binding"))
 
         return reportLock.withLock {
             when (binding) {
                 is HidBinding.Keyboard -> when (action) {
                     KeyAction.TAP -> {
-                        write(HidDescriptor.REPORT_ID_KEYBOARD, HidReport.keyboard(binding.modifiers, binding.usage))
+                        write(
+                            HidDescriptor.REPORT_ID_KEYBOARD,
+                            HidReport.keyboard(binding.modifiers, binding.usage),
+                        )
                         write(HidDescriptor.REPORT_ID_KEYBOARD, HidReport.KEYBOARD_RELEASE)
                     }
                     KeyAction.PRESS ->
-                        write(HidDescriptor.REPORT_ID_KEYBOARD, HidReport.keyboard(binding.modifiers, binding.usage))
+                        write(
+                            HidDescriptor.REPORT_ID_KEYBOARD,
+                            HidReport.keyboard(binding.modifiers, binding.usage),
+                        )
                     KeyAction.RELEASE ->
                         write(HidDescriptor.REPORT_ID_KEYBOARD, HidReport.KEYBOARD_RELEASE)
                 }
@@ -258,7 +298,10 @@ class BluetoothHidTransport(
                 text.forEach { char ->
                     val stroke = AsciiKeyMap.stroke(char)
                         ?: throw IllegalArgumentException("Cannot map character '$char'")
-                    write(HidDescriptor.REPORT_ID_KEYBOARD, HidReport.keyboard(stroke.modifiers, stroke.usage))
+                    write(
+                        HidDescriptor.REPORT_ID_KEYBOARD,
+                        HidReport.keyboard(stroke.modifiers, stroke.usage),
+                    )
                     write(HidDescriptor.REPORT_ID_KEYBOARD, HidReport.KEYBOARD_RELEASE)
                 }
             }
@@ -271,21 +314,64 @@ class BluetoothHidTransport(
                 write(HidDescriptor.REPORT_ID_MOUSE, HidReport.mouse(buttons = 0, delta = event.delta))
             is PointerEvent.Button -> {
                 val mask = if (event.pressed) 1 shl event.button.ordinal else 0
-                write(HidDescriptor.REPORT_ID_MOUSE, HidReport.mouse(mask, dev.djabari.uniremote.model.PointerDelta.IDLE))
+                write(
+                    HidDescriptor.REPORT_ID_MOUSE,
+                    HidReport.mouse(mask, PointerDelta.IDLE),
+                )
             }
             is PointerEvent.Scroll ->
                 write(
                     HidDescriptor.REPORT_ID_MOUSE,
-                    HidReport.mouse(0, dev.djabari.uniremote.model.PointerDelta.clamped(0, 0, event.ticks)),
+                    HidReport.mouse(0, PointerDelta.clamped(0, 0, event.ticks)),
                 )
         }
     }
 
-    override fun onBluetoothDisabled() = Unit
+    override fun onBluetoothDisabled() {
+        val wasIdleWithoutTarget = _state.value == TransportState.Idle && currentTarget == null
+        externalFailure = TransportError.BLUETOOTH_DISABLED
+        attemptInFlight = false
+        attemptSignal?.complete(false)
+        registrationSignal?.complete(false)
+        stopKeepAlive()
+        connectedDevice = null
+        _capabilities.value = emptySet()
+        isAppRegistered = false
+        currentTarget = null
+        if (!wasIdleWithoutTarget) _state.value = TransportState.Failed(TransportError.BLUETOOTH_DISABLED)
+    }
 
-    override fun onBondRemoved(address: String) = Unit
+    override fun onBondRemoved(address: String) {
+        if (currentTarget?.bluetoothAddress == address) {
+            externalFailure = TransportError.NOT_PAIRED
+            attemptInFlight = false
+            attemptSignal?.complete(false)
+            registrationSignal?.complete(false)
+            handleLinkLoss(TransportError.NOT_PAIRED)
+        }
+    }
 
-    override fun onAclDisconnected(address: String) = Unit
+    override fun onAclDisconnected(address: String) {
+        if (connectedDevice?.address == address) handleLinkLoss(TransportError.CONNECTION_LOST)
+    }
+
+    private fun handleLinkLoss(reason: TransportError) {
+        val device = connectedDevice
+        if (device == null && _state.value is TransportState.Failed) return
+        if (reason == TransportError.CONNECTION_LOST &&
+            consecutiveWriteFailures >= MAX_CONSECUTIVE_WRITE_FAILURES
+        ) {
+            device?.let { proxy.disconnect(it) }
+        }
+        attemptInFlight = false
+        attemptSignal?.complete(false)
+        stopKeepAlive()
+        connectedDevice = null
+        _capabilities.value = emptySet()
+        releaseRegistration()
+        currentTarget = null
+        _state.value = TransportState.Failed(reason)
+    }
 
     /**
      * A registration held by a transport nobody is using blocks the next one: the framework
@@ -298,8 +384,18 @@ class BluetoothHidTransport(
         }
     }
 
+    private fun fail(error: TransportError): Result<Unit> {
+        attemptInFlight = false
+        // Clearing the target makes callbacks arriving after failure inert.
+        currentTarget = null
+        releaseRegistration()
+        _capabilities.value = emptySet()
+        _state.value = TransportState.Failed(error)
+        return Result.failure(IllegalStateException(error.name))
+    }
+
     /**
-     * Tizen ignores Consumer `AC Back` and expects keyboard Escape instead; every other
+     * Tizen ignores Consumer `AC Back` and expects keyboard Escape instead. Every other
      * ecosystem we support honours the consumer usage. Everything else maps identically.
      */
     private fun bindingFor(key: RemoteKey): HidBinding? =
@@ -336,23 +432,25 @@ class BluetoothHidTransport(
         keepAliveJob = null
     }
 
-    private fun releaseAll(): Result<Unit> = runCatching {
-        write(HidDescriptor.REPORT_ID_KEYBOARD, HidReport.KEYBOARD_RELEASE)
-        write(HidDescriptor.REPORT_ID_CONSUMER, HidReport.CONSUMER_RELEASE)
+    private fun releaseAll(device: BluetoothDevice?) {
+        write(HidDescriptor.REPORT_ID_KEYBOARD, HidReport.KEYBOARD_RELEASE, device)
+        write(HidDescriptor.REPORT_ID_CONSUMER, HidReport.CONSUMER_RELEASE, device)
     }
 
-    private fun write(reportId: Byte, data: ByteArray): Result<Unit> {
-        val ok = proxy.sendReport(connectedDevice, reportId.toInt(), data)
-        return if (ok) Result.success(Unit)
-        else Result.failure(IllegalStateException(TransportError.CONNECTION_LOST.name))
-    }
-
-    private fun findBluetoothDevice(address: String?): BluetoothDevice? {
-        if (address == null || adapter == null) return null
-        return try {
-            adapter.getRemoteDevice(address)
-        } catch (_: Exception) {
-            null
+    private fun write(
+        id: Byte,
+        data: ByteArray,
+        device: BluetoothDevice? = connectedDevice,
+    ): Result<Unit> {
+        val ok = proxy.sendReport(device, id.toInt(), data)
+        consecutiveWriteFailures = if (ok) 0 else consecutiveWriteFailures + 1
+        if (!ok && consecutiveWriteFailures >= MAX_CONSECUTIVE_WRITE_FAILURES && connectedDevice != null) {
+            handleLinkLoss(TransportError.CONNECTION_LOST)
+        }
+        return if (ok) {
+            Result.success(Unit)
+        } else {
+            Result.failure(IllegalStateException(TransportError.CONNECTION_LOST.name))
         }
     }
 
@@ -360,8 +458,23 @@ class BluetoothHidTransport(
     internal fun getCallback(): BluetoothHidDevice.Callback = callback
 
     companion object {
-        /** How long the TV gets to accept the HID connection before we fall back. */
-        const val CONNECT_TIMEOUT_MS = 15_000L
+        /** Maximum time to wait for each host connection attempt. */
+        const val ATTEMPT_TIMEOUT_MS = 8_000L
+
+        /** Maximum time to wait for the framework's registration callback. */
+        const val REGISTER_TIMEOUT_MS = 3_000L
+
+        /** Maximum time to wait for an existing framework registration to be released. */
+        const val UNREGISTER_TIMEOUT_MS = 1_000L
+
+        /** Number of connection attempts before returning HOST_REJECTED. */
+        const val CONNECT_ATTEMPTS = 3
+
+        /** Linear delay multiplier between connection attempts. */
+        const val RETRY_BACKOFF_MS = 1_000L
+
+        /** Failed report writes tolerated before dropping a connected link. */
+        const val MAX_CONSECUTIVE_WRITE_FAILURES = 3
 
         /** Idle-link keep-alive cadence, below the ~30s at which TVs start dropping links. */
         const val KEEP_ALIVE_INTERVAL_MS = 20_000L
