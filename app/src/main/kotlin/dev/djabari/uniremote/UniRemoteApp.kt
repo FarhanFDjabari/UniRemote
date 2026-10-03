@@ -360,6 +360,7 @@ private fun ConnectionStatusBadge(state: TransportState) {
     val (color, text) = when (state) {
         is TransportState.Connected -> Color(0xFF4CAF50) to "Connected"
         is TransportState.Connecting, is TransportState.Preparing -> Color(0xFFFFC107) to "Connecting"
+        is TransportState.Reconnecting -> Color(0xFFFFC107) to "Reconnecting"
         is TransportState.AwaitingHost -> Color(0xFF2196F3) to "Waiting for TV"
         is TransportState.Failed -> Color(0xFFF44336) to "Error"
         is TransportState.Idle -> Color(0xFF9E9E9E) to "Idle"

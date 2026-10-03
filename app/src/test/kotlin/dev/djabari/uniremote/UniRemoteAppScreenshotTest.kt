@@ -1,6 +1,10 @@
 package dev.djabari.uniremote
 
 import android.content.Context
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.test.core.app.ApplicationProvider
@@ -8,6 +12,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
 import dev.djabari.uniremote.feature.keyboard.KeyboardViewModel
 import dev.djabari.uniremote.feature.pairing.ConnectionGuideScreen
+import dev.djabari.uniremote.feature.pairing.PairingScreen
 import dev.djabari.uniremote.feature.pairing.PairingViewModel
 import dev.djabari.uniremote.feature.remote.RemoteViewModel
 import dev.djabari.uniremote.feature.touchpad.TouchpadViewModel
@@ -16,6 +21,7 @@ import dev.djabari.uniremote.model.TvBrand
 import dev.djabari.uniremote.session.DeviceDiscovery
 import dev.djabari.uniremote.session.TargetRepository
 import dev.djabari.uniremote.transport.TransportCapability
+import dev.djabari.uniremote.transport.TransportError
 import dev.djabari.uniremote.transport.TransportState
 import dev.djabari.uniremote.transport.network.discovery.MdnsDiscovery
 import dev.djabari.uniremote.transport.network.discovery.NetworkDiscovery
@@ -72,21 +78,25 @@ class UniRemoteAppScreenshotTest {
             session.setDisconnected()
         }
 
-        val context = ApplicationProvider.getApplicationContext<Context>()
         composeRule.setContent {
             UniRemoteApp(
                 remoteViewModel = RemoteViewModel(session),
                 touchpadViewModel = TouchpadViewModel(session),
                 keyboardViewModel = KeyboardViewModel(session),
-                pairingViewModel = PairingViewModel(
-                    session,
-                    TargetRepository(context),
-                    DeviceDiscovery(NetworkDiscovery(MdnsDiscovery(context)), null),
-                ),
+                pairingViewModel = pairingViewModel(),
                 layout = layout,
             )
         }
         composeRule.onRoot().captureRoboImage(goldenPath(layout, connected))
+    }
+
+    private fun pairingViewModel(): PairingViewModel {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        return PairingViewModel(
+            session,
+            TargetRepository(context),
+            DeviceDiscovery(NetworkDiscovery(MdnsDiscovery(context)), null),
+        )
     }
 
     private fun goldenPath(layout: RemoteLayout, connected: Boolean) =
@@ -131,6 +141,40 @@ class UniRemoteAppScreenshotTest {
             UniRemoteTheme { ConnectionGuideScreen(onBack = {}) }
         }
         composeRule.onRoot().captureRoboImage("src/test/roborazzi/ConnectionGuide_compact.png")
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-mdpi")
+    fun pairing_failed_host_rejected_compact() {
+        session.setState(TransportState.Failed(TransportError.HOST_REJECTED), target)
+        composeRule.setContent {
+            UniRemoteTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background,
+                ) {
+                    PairingScreen(viewModel = pairingViewModel())
+                }
+            }
+        }
+        composeRule.onRoot().captureRoboImage("src/test/roborazzi/Pairing_failed_host_rejected_compact.png")
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-mdpi")
+    fun pairing_reconnecting_compact() {
+        session.setState(TransportState.Reconnecting(target, attempt = 2, maxAttempts = 3), target)
+        composeRule.setContent {
+            UniRemoteTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background,
+                ) {
+                    PairingScreen(viewModel = pairingViewModel())
+                }
+            }
+        }
+        composeRule.onRoot().captureRoboImage("src/test/roborazzi/Pairing_reconnecting_compact.png")
     }
 
     @Test

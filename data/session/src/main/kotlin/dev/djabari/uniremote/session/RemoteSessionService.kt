@@ -7,19 +7,19 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothHidDevice
-import android.bluetooth.BluetoothManager
-import android.bluetooth.BluetoothProfile
+import android.bluetooth.BluetoothDevice
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import dev.djabari.uniremote.common.PermissionUtils
 import dev.djabari.uniremote.transport.TransportState
-import dev.djabari.uniremote.transport.bthid.RealHidDeviceProxy
+import dev.djabari.uniremote.transport.bthid.BluetoothLinkEvents
 import dev.djabari.uniremote.transport.userMessage
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -43,33 +43,19 @@ class RemoteSessionService : Service() {
     lateinit var session: RemoteSession
 
     @Inject
-    lateinit var hidProxy: RealHidDeviceProxy
+    lateinit var profileManager: HidProfileController
+
+    @Inject
+    lateinit var linkEvents: BluetoothLinkEvents
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var stateObserverJob: Job? = null
-    private var bluetoothAdapter: BluetoothAdapter? = null
-    private var hidProfile: BluetoothHidDevice? = null
+    private var eventReceiver: BluetoothEventReceiver? = null
 
     private val binder = LocalBinder()
 
     inner class LocalBinder : Binder() {
         val service: RemoteSessionService get() = this@RemoteSessionService
-    }
-
-    private val profileListener = object : BluetoothProfile.ServiceListener {
-        override fun onServiceConnected(profile: Int, proxy: BluetoothProfile?) {
-            if (profile == BluetoothProfile.HID_DEVICE && proxy is BluetoothHidDevice) {
-                hidProfile = proxy
-                hidProxy.setHidDevice(proxy)
-            }
-        }
-
-        override fun onServiceDisconnected(profile: Int) {
-            if (profile == BluetoothProfile.HID_DEVICE) {
-                hidProfile = null
-                hidProxy.setHidDevice(null)
-            }
-        }
     }
 
     override fun onCreate() {
@@ -81,7 +67,16 @@ class RemoteSessionService : Service() {
             return
         }
         createNotificationChannel()
-        initBluetoothHidProfile()
+        profileManager.open()
+        val router = BluetoothEventRouter(linkEvents, profileManager, session, serviceScope)
+        eventReceiver = BluetoothEventReceiver(router).also { receiver ->
+            val filter = IntentFilter().apply {
+                addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+                addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+                addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
+            }
+            ContextCompat.registerReceiver(this, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        }
         observeSessionState()
     }
 
@@ -116,13 +111,6 @@ class RemoteSessionService : Service() {
         return START_STICKY
     }
 
-    @SuppressLint("MissingPermission")
-    private fun initBluetoothHidProfile() {
-        val manager = getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
-        bluetoothAdapter = manager?.adapter ?: BluetoothAdapter.getDefaultAdapter()
-        bluetoothAdapter?.getProfileProxy(applicationContext, profileListener, BluetoothProfile.HID_DEVICE)
-    }
-
     private fun observeSessionState() {
         stateObserverJob = serviceScope.launch {
             session.state.collect { state ->
@@ -147,6 +135,7 @@ class RemoteSessionService : Service() {
         val statusText = when (state) {
             is TransportState.Connected -> "Connected to ${state.target.displayName}"
             is TransportState.Connecting -> "Connecting to ${state.target.displayName}..."
+            is TransportState.Reconnecting -> "Connection lost. Reconnecting to ${state.target.displayName} (${state.attempt}/${state.maxAttempts})..."
             is TransportState.AwaitingHost -> "Waiting for TV to connect..."
             is TransportState.Preparing -> "Preparing Bluetooth HID..."
             is TransportState.Failed -> state.reason.userMessage
@@ -184,6 +173,8 @@ class RemoteSessionService : Service() {
     @SuppressLint("MissingPermission")
     override fun onDestroy() {
         stateObserverJob?.cancel()
+        eventReceiver?.let { unregisterReceiver(it) }
+        eventReceiver = null
 
         // Teardown has to finish before the process lets go of the profile proxy: a leaked
         // HID registration cannot be reclaimed until the phone reboots. Launching it on a
@@ -193,16 +184,7 @@ class RemoteSessionService : Service() {
         }
         serviceScope.cancel()
 
-        // Only closeProfileProxy touches the Bluetooth stack, so only it needs the guard.
-        // Releasing the references is a local write, and skipping it when the permission had
-        // been revoked left the process holding a HID device it could no longer use.
-        hidProfile?.let { proxy ->
-            if (PermissionUtils.hasBluetoothPermissions(this)) {
-                bluetoothAdapter?.closeProfileProxy(BluetoothProfile.HID_DEVICE, proxy)
-            }
-            hidProfile = null
-        }
-        hidProxy.setHidDevice(null)
+        profileManager.close()
 
         super.onDestroy()
     }

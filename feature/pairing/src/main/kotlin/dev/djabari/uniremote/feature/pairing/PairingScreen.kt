@@ -1,8 +1,14 @@
 package dev.djabari.uniremote.feature.pairing
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -43,14 +49,32 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import dev.djabari.uniremote.model.RemoteTarget
 import dev.djabari.uniremote.model.TvBrand
+import dev.djabari.uniremote.transport.TransportError
 import dev.djabari.uniremote.transport.TransportState
 import dev.djabari.uniremote.transport.userMessage
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** Failures a full in-app reset can clear by re-registering the HID profile from scratch. */
+private val resetConnectionErrors = setOf(
+    TransportError.HOST_REJECTED,
+    TransportError.CONNECTION_LOST,
+    TransportError.HID_REGISTRATION_FAILED,
+    TransportError.TARGET_UNREACHABLE,
+    TransportError.UNKNOWN,
+)
+
+/** Failures where the system Bluetooth settings screen is a useful next step. */
+private val bluetoothSettingsErrors = setOf(
+    TransportError.BLUETOOTH_DISABLED,
+    TransportError.NOT_PAIRED,
+    TransportError.HOST_REJECTED,
+)
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun PairingScreen(
     viewModel: PairingViewModel,
@@ -65,6 +89,7 @@ fun PairingScreen(
     val discoveredTargets by viewModel.discoveredTargets.collectAsState()
     val isScanning by viewModel.isScanning.collectAsState()
 
+    val context = LocalContext.current
     var showAddDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
@@ -80,7 +105,9 @@ fun PairingScreen(
                 colors = CardDefaults.cardColors(
                     containerColor = when (connection) {
                         is TransportState.Connected -> MaterialTheme.colorScheme.primaryContainer
-                        is TransportState.Connecting, is TransportState.Preparing -> MaterialTheme.colorScheme.secondaryContainer
+                        is TransportState.Connecting,
+                        is TransportState.Preparing,
+                        is TransportState.Reconnecting -> MaterialTheme.colorScheme.secondaryContainer
                         is TransportState.Failed -> MaterialTheme.colorScheme.errorContainer
                         else -> MaterialTheme.colorScheme.surfaceVariant
                     },
@@ -98,6 +125,7 @@ fun PairingScreen(
                                 text = when (val state = connection) {
                                     is TransportState.Connected -> "Connected: ${state.target.displayName}"
                                     is TransportState.Connecting -> "Connecting to ${state.target.displayName}..."
+                                    is TransportState.Reconnecting -> "Reconnecting to ${state.target.displayName} (${state.attempt}/${state.maxAttempts})..."
                                     is TransportState.AwaitingHost -> "Waiting for TV to connect..."
                                     is TransportState.Preparing -> "Preparing Bluetooth HID..."
                                     is TransportState.Failed -> "Couldn't connect"
@@ -107,7 +135,8 @@ fun PairingScreen(
                             )
                             if (connection is TransportState.AwaitingHost) {
                                 Text(
-                                    text = "On your TV: go to Settings > Remotes & Accessories > Add Accessory",
+                                    text = "Make sure the TV is on and nearby. First time? Pair this phone from the " +
+                                        "TV's Bluetooth settings first.",
                                     style = MaterialTheme.typography.bodySmall,
                                     modifier = Modifier.padding(top = 4.dp),
                                 )
@@ -118,14 +147,72 @@ fun PairingScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                     modifier = Modifier.padding(top = 4.dp),
                                 )
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.padding(top = 8.dp),
+                                ) {
+                                    OutlinedButton(
+                                        onClick = { viewModel.retry() },
+                                        modifier = Modifier.testTag("pairing-retry"),
+                                    ) {
+                                        Text("Try again")
+                                    }
+                                    if (failed.reason in resetConnectionErrors) {
+                                        OutlinedButton(
+                                            onClick = { viewModel.resetConnection() },
+                                            modifier = Modifier.testTag("pairing-reset"),
+                                        ) {
+                                            Text("Reset connection")
+                                        }
+                                    }
+                                    if (failed.reason in bluetoothSettingsErrors) {
+                                        OutlinedButton(
+                                            onClick = {
+                                                try {
+                                                    context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+                                                } catch (_: ActivityNotFoundException) {
+                                                    // Some TV-box and OEM builds ship without this screen.
+                                                }
+                                            },
+                                            modifier = Modifier.testTag("pairing-bt-settings"),
+                                        ) {
+                                            Text("Bluetooth settings")
+                                        }
+                                    }
+                                    if (failed.reason == TransportError.PERMISSION_DENIED) {
+                                        OutlinedButton(
+                                            onClick = {
+                                                context.startActivity(
+                                                    Intent(
+                                                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                                        Uri.parse("package:${context.packageName}"),
+                                                    ),
+                                                )
+                                            },
+                                            modifier = Modifier.testTag("pairing-app-settings"),
+                                        ) {
+                                            Text("App settings")
+                                        }
+                                    }
+                                }
                             }
                         }
 
-                        if (connection is TransportState.Connecting || connection is TransportState.Preparing) {
+                        if (
+                            connection is TransportState.Connecting ||
+                            connection is TransportState.Preparing ||
+                            connection is TransportState.Reconnecting
+                        ) {
                             CircularProgressIndicator(modifier = Modifier.size(24.dp))
                         } else if (connection is TransportState.Connected) {
                             OutlinedButton(onClick = { viewModel.disconnect() }) {
                                 Text("Disconnect")
+                            }
+                        }
+                        if (connection is TransportState.Reconnecting) {
+                            OutlinedButton(onClick = { viewModel.disconnect() }) {
+                                Text("Stop")
                             }
                         }
                     }

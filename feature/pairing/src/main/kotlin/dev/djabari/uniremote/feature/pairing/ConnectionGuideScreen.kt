@@ -114,6 +114,10 @@ fun ConnectionGuideScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         BulletLine(
+                            "Remote stopped responding or stuck connecting? Tap Reset connection on the Pairing tab. " +
+                                "There's no need to force-stop the app, clear its data or unpair.",
+                        )
+                        BulletLine(
                             "Phone was paired before? If the TV won't accept the connection, remove the phone " +
                                 "in the TV's Bluetooth settings and pair again while UniRemote is open.",
                         )

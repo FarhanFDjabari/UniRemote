@@ -18,6 +18,12 @@ interface RemoteSession {
     /** Re-establishes the last session after an idle drop or an app resume. */
     suspend fun reconnect(): Result<Unit>
 
+    /**
+     * Tears the Bluetooth stack state down and connects to the last target from scratch —
+     * the in-app equivalent of force-stopping the app, for links a flaky TV left wedged.
+     */
+    suspend fun resetConnection(): Result<Unit>
+
     suspend fun disconnect()
     suspend fun press(key: RemoteKey, action: KeyAction = KeyAction.TAP): Result<Unit>
     suspend fun type(text: String): Result<Unit>

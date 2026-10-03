@@ -38,8 +38,15 @@ class FakeRemoteSession : RemoteSession {
         _state.value = TransportState.Idle
     }
 
+    /** Drives the connection state directly, for screenshots of failed and reconnecting states. */
+    fun setState(state: TransportState, target: RemoteTarget?) {
+        _activeTarget.value = target
+        _state.value = state
+    }
+
     override suspend fun connect(target: RemoteTarget): Result<Unit> = Result.success(Unit)
     override suspend fun reconnect(): Result<Unit> = Result.success(Unit)
+    override suspend fun resetConnection(): Result<Unit> = Result.success(Unit)
     override suspend fun disconnect() = Unit
     override suspend fun press(key: RemoteKey, action: KeyAction): Result<Unit> = Result.success(Unit)
     override suspend fun type(text: String): Result<Unit> = Result.success(Unit)
