@@ -75,7 +75,7 @@ class NetworkTransportTest {
     }
 
     @Test
-    fun `a held key is sent once on press and not again on release`() = runTest {
+    fun `an adapter without hold support sends a held key once on press and not on release`() = runTest {
         val roku = FakeAdapter(TvBrand.ROKU)
         val transport = NetworkTransport(listOf(roku))
         transport.connect(target())
@@ -85,6 +85,24 @@ class NetworkTransportTest {
 
         assertThat(release.isSuccess).isTrue()
         assertThat(roku.sentKeys).containsExactly(RemoteKey.DPAD_CENTER)
+    }
+
+    @Test
+    fun `key actions are forwarded to the adapter`() = runTest {
+        val actions = mutableListOf<KeyAction>()
+        val holdAware = object : BrandAdapter by FakeAdapter(TvBrand.ROKU) {
+            override suspend fun send(key: RemoteKey, action: KeyAction): Result<Unit> {
+                actions += action
+                return Result.success(Unit)
+            }
+        }
+        val transport = NetworkTransport(listOf(holdAware))
+        transport.connect(target())
+
+        transport.sendKey(RemoteKey.DPAD_CENTER, KeyAction.PRESS)
+        transport.sendKey(RemoteKey.DPAD_CENTER, KeyAction.RELEASE)
+
+        assertThat(actions).containsExactly(KeyAction.PRESS, KeyAction.RELEASE).inOrder()
     }
 
     @Test

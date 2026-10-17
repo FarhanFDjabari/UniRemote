@@ -1,6 +1,7 @@
 package dev.djabari.uniremote.transport.network.adapters
 
 import android.util.Base64
+import dev.djabari.uniremote.model.KeyAction
 import dev.djabari.uniremote.model.RemoteKey
 import dev.djabari.uniremote.model.RemoteTarget
 import dev.djabari.uniremote.model.TvBrand
@@ -100,23 +101,15 @@ class SamsungTizenAdapter(
         }
     }
 
-    override suspend fun send(key: RemoteKey): Result<Unit> {
+    override suspend fun send(key: RemoteKey): Result<Unit> = send(key, KeyAction.TAP)
+
+    /** The remote channel accepts separate Press and Release commands, so holds pass through. */
+    override suspend fun send(key: RemoteKey, action: KeyAction): Result<Unit> {
         val ws = socket ?: return Result.failure(IllegalStateException("Not connected"))
         val name = TizenKeys[key]
             ?: return Result.failure(IllegalArgumentException("$key is not available on Tizen"))
 
-        val payload = JSONObject()
-            .put("method", "ms.remote.control")
-            .put(
-                "params",
-                JSONObject()
-                    .put("Cmd", "Click")
-                    .put("DataOfCmd", name)
-                    .put("Option", "false")
-                    .put("TypeOfRemote", "SendRemoteKey"),
-            )
-
-        return if (ws.send(payload.toString())) Result.success(Unit)
+        return if (ws.send(remoteKeyPayload(name, action))) Result.success(Unit)
         else Result.failure(IllegalStateException("WebSocket rejected the key"))
     }
 
@@ -145,9 +138,29 @@ class SamsungTizenAdapter(
         socket = null
     }
 
-    private companion object {
-        const val TOKEN_KEY = "tizen_token"
-        const val HANDSHAKE_TIMEOUT_MS = 20_000L
-        const val NORMAL_CLOSURE = 1000
+    internal companion object {
+        /** `ms.remote.control` key message; `Cmd` is Click for a tap, Press/Release for a hold. */
+        fun remoteKeyPayload(keyName: String, action: KeyAction): String {
+            val cmd = when (action) {
+                KeyAction.TAP -> "Click"
+                KeyAction.PRESS -> "Press"
+                KeyAction.RELEASE -> "Release"
+            }
+            return JSONObject()
+                .put("method", "ms.remote.control")
+                .put(
+                    "params",
+                    JSONObject()
+                        .put("Cmd", cmd)
+                        .put("DataOfCmd", keyName)
+                        .put("Option", "false")
+                        .put("TypeOfRemote", "SendRemoteKey"),
+                )
+                .toString()
+        }
+
+        private const val TOKEN_KEY = "tizen_token"
+        private const val HANDSHAKE_TIMEOUT_MS = 20_000L
+        private const val NORMAL_CLOSURE = 1000
     }
 }

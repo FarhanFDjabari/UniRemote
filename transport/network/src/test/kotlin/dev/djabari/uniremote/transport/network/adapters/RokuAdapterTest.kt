@@ -1,6 +1,7 @@
 package dev.djabari.uniremote.transport.network.adapters
 
 import com.google.common.truth.Truth.assertThat
+import dev.djabari.uniremote.model.KeyAction
 import dev.djabari.uniremote.model.RemoteKey
 import dev.djabari.uniremote.model.RemoteTarget
 import dev.djabari.uniremote.model.TvBrand
@@ -54,6 +55,28 @@ class RokuAdapterTest {
 
             val adapter = RokuAdapter(port = server.port)
             assertThat(adapter.identify(rokuTarget("127.0.0.1"))).isFalse()
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `a hold is sent as keydown then keyup, a tap as keypress`() = runTest {
+        val server = MockWebServer()
+        try {
+            repeat(4) { server.enqueue(MockResponse().setResponseCode(200)) }
+            server.start()
+            val adapter = RokuAdapter(port = server.port)
+            adapter.connect(rokuTarget("127.0.0.1"))
+            server.takeRequest() // device-info probe
+
+            adapter.send(RemoteKey.DPAD_CENTER, KeyAction.PRESS)
+            adapter.send(RemoteKey.DPAD_CENTER, KeyAction.RELEASE)
+            adapter.send(RemoteKey.DPAD_CENTER)
+
+            assertThat(server.takeRequest().path).isEqualTo("/keydown/Select")
+            assertThat(server.takeRequest().path).isEqualTo("/keyup/Select")
+            assertThat(server.takeRequest().path).isEqualTo("/keypress/Select")
         } finally {
             server.shutdown()
         }

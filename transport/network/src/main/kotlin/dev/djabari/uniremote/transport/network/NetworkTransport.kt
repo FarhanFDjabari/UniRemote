@@ -144,12 +144,7 @@ class NetworkTransport(
         val adapter = activeAdapter
             ?: return Result.failure(IllegalStateException("No connected network adapter"))
 
-        // Brand APIs only offer discrete key presses, so a hold degrades to a tap on press;
-        // sending again on release would press the key twice.
-        return when (action) {
-            KeyAction.TAP, KeyAction.PRESS -> adapter.send(key)
-            KeyAction.RELEASE -> Result.success(Unit)
-        }
+        return adapter.send(key, action)
     }
 
     override suspend fun sendText(text: String): Result<Unit> {
@@ -182,6 +177,16 @@ interface BrandAdapter {
     suspend fun discover(): List<RemoteTarget>
     suspend fun connect(target: RemoteTarget): Result<Unit>
     suspend fun send(key: RemoteKey): Result<Unit>
+
+    /**
+     * Hold-aware send. Ecosystems whose API only offers discrete presses keep this default:
+     * a hold degrades to a tap on press, and release is a no-op so the key is not sent twice.
+     */
+    suspend fun send(key: RemoteKey, action: KeyAction): Result<Unit> = when (action) {
+        KeyAction.TAP, KeyAction.PRESS -> send(key)
+        KeyAction.RELEASE -> Result.success(Unit)
+    }
+
     suspend fun sendText(text: String): Result<Unit>
     suspend fun wakeOnLan(mac: String): Result<Unit>
     suspend fun disconnect()
