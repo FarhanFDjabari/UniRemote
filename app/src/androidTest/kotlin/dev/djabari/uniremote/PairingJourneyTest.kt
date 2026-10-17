@@ -152,6 +152,8 @@ class PairingJourneyTest {
 
         override suspend fun reconnect(): Result<Unit> = Result.success(Unit)
 
+        override suspend fun resetConnection(): Result<Unit> = Result.success(Unit)
+
         override suspend fun disconnect() {
             connectedTarget = null
             _activeTarget.value = null
