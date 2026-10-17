@@ -58,6 +58,14 @@ class TouchpadViewModel @Inject constructor(
         session.pointer(PointerEvent.Button(PointerButton.LEFT, pressed = false))
     }
 
+    fun onPrimaryPress() = viewModelScope.launch {
+        session.pointer(PointerEvent.Button(PointerButton.LEFT, pressed = true))
+    }
+
+    fun onPrimaryRelease() = viewModelScope.launch {
+        session.pointer(PointerEvent.Button(PointerButton.LEFT, pressed = false))
+    }
+
     fun onSecondaryTap() = viewModelScope.launch {
         session.pointer(PointerEvent.Button(PointerButton.RIGHT, pressed = true))
         delay(30)

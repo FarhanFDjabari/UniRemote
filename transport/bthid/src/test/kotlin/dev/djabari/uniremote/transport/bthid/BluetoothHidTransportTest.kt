@@ -569,11 +569,48 @@ class BluetoothHidTransportTest {
     }
 
     @Test
-    fun `disconnect emits keyboard and consumer release reports`() = runTest {
+    fun `a held mouse button stays down through moves, scrolls and the keep-alive`() = runTest {
+        val keepAlive = BluetoothHidTransport(
+            fakeProxy,
+            adapter = adapter,
+            scope = backgroundScope,
+            keepAliveIntervalMs = 100,
+        )
+        fakeProxy.autoConnectCallback = true
+        keepAlive.connect(bondedTarget)
+        keepAlive.sendPointer(PointerEvent.Button(PointerButton.LEFT, pressed = true))
+        fakeProxy.sentReports.clear()
+
+        keepAlive.sendPointer(PointerEvent.Move(PointerDelta.clamped(5, 5)))
+        keepAlive.sendPointer(PointerEvent.Scroll(1))
+        advanceTimeBy(250)
+
+        assertThat(fakeProxy.sentReports.size).isAtLeast(3)
+        assertThat(fakeProxy.sentReports.map { it.second[0].toInt() }.toSet()).containsExactly(1)
+
+        keepAlive.sendPointer(PointerEvent.Button(PointerButton.LEFT, pressed = false))
+        assertThat(fakeProxy.sentReports.last().second[0].toInt()).isEqualTo(0)
+    }
+
+    @Test
+    fun `releasing one mouse button keeps the other held`() = runTest {
+        transport.sendPointer(PointerEvent.Button(PointerButton.LEFT, pressed = true))
+        transport.sendPointer(PointerEvent.Button(PointerButton.RIGHT, pressed = true))
+        transport.sendPointer(PointerEvent.Button(PointerButton.RIGHT, pressed = false))
+
+        assertThat(fakeProxy.sentReports.map { it.second[0].toInt() }).containsExactly(1, 3, 1).inOrder()
+    }
+
+    @Test
+    fun `disconnect emits keyboard, consumer and mouse release reports`() = runTest {
+        transport.sendPointer(PointerEvent.Button(PointerButton.LEFT, pressed = true))
+        fakeProxy.sentReports.clear()
+
         transport.disconnect()
 
-        assertThat(fakeProxy.sentReports).hasSize(2)
+        assertThat(fakeProxy.sentReports).hasSize(3)
         assertThat(fakeProxy.sentReports[0].second).isEqualTo(HidReport.KEYBOARD_RELEASE)
         assertThat(fakeProxy.sentReports[1].second).isEqualTo(HidReport.CONSUMER_RELEASE)
+        assertThat(fakeProxy.sentReports[2].second).isEqualTo(HidReport.mouse(0, PointerDelta.IDLE))
     }
 }

@@ -31,7 +31,7 @@ import org.robolectric.annotation.GraphicsMode
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [35], qualifiers = "w411dp-h891dp-mdpi")
+@Config(sdk = [35], qualifiers = "w411dp-h891dp-night-mdpi")
 class ControlScreenshotTest {
 
     @get:Rule
@@ -89,7 +89,7 @@ class ControlScreenshotTest {
         composeRule.setContent {
             UniRemoteTheme {
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.size(340.dp)) {
-                    DpadControl(onKey = {})
+                    DpadControl(onKey = {}, onCenterPress = {}, onCenterRelease = {})
                 }
             }
         }
@@ -101,10 +101,22 @@ class ControlScreenshotTest {
         composeRule.setContent {
             UniRemoteTheme {
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.size(340.dp)) {
-                    DpadControl(onKey = {}, enabled = false)
+                    DpadControl(onKey = {}, onCenterPress = {}, onCenterRelease = {}, enabled = false)
                 }
             }
         }
         composeRule.onRoot().captureRoboImage(golden("DpadControl_disabled"))
+    }
+
+    @Test
+    fun dpadControl_enabled_light() {
+        composeRule.setContent {
+            UniRemoteTheme(darkTheme = false) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(340.dp)) {
+                    DpadControl(onKey = {}, onCenterPress = {}, onCenterRelease = {})
+                }
+            }
+        }
+        composeRule.onRoot().captureRoboImage(golden("DpadControl_enabled_light"))
     }
 }

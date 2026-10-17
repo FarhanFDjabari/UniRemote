@@ -34,7 +34,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * One golden per window class x connection state. The layout regime is injected — in
+ * One golden per window class x connection state, in the dark theme, plus light-theme
+ * goldens for the compact layout. The layout regime is injected — in
  * production it comes from a real window + fold posture, which a JVM test cannot reach.
  *
  * Goldens live in src/test/roborazzi; record with
@@ -71,7 +72,7 @@ class UniRemoteAppScreenshotTest {
 
     private val session = FakeRemoteSession()
 
-    private fun capture(layout: RemoteLayout, connected: Boolean) {
+    private fun capture(layout: RemoteLayout, connected: Boolean, suffix: String = "") {
         if (connected) {
             session.setConnected(target, fullHidCapabilities)
         } else {
@@ -87,7 +88,7 @@ class UniRemoteAppScreenshotTest {
                 layout = layout,
             )
         }
-        composeRule.onRoot().captureRoboImage(goldenPath(layout, connected))
+        composeRule.onRoot().captureRoboImage(goldenPath(layout, connected, suffix))
     }
 
     private fun pairingViewModel(): PairingViewModel {
@@ -99,43 +100,51 @@ class UniRemoteAppScreenshotTest {
         )
     }
 
-    private fun goldenPath(layout: RemoteLayout, connected: Boolean) =
-        "src/test/roborazzi/UniRemoteApp_${layout.name}_${if (connected) "connected" else "disconnected"}.png"
+    private fun goldenPath(layout: RemoteLayout, connected: Boolean, suffix: String) =
+        "src/test/roborazzi/UniRemoteApp_${layout.name}_${if (connected) "connected" else "disconnected"}$suffix.png"
 
     @Test
-    @Config(qualifiers = "w411dp-h891dp-mdpi")
+    @Config(qualifiers = "w411dp-h891dp-night-mdpi")
     fun compact_disconnected() = capture(RemoteLayout.COMPACT, connected = false)
 
     @Test
-    @Config(qualifiers = "w411dp-h891dp-mdpi")
+    @Config(qualifiers = "w411dp-h891dp-night-mdpi")
     fun compact_connected() = capture(RemoteLayout.COMPACT, connected = true)
 
     @Test
-    @Config(qualifiers = "w891dp-h411dp-mdpi")
+    @Config(qualifiers = "w411dp-h891dp-notnight-mdpi")
+    fun compact_disconnected_light() = capture(RemoteLayout.COMPACT, connected = false, suffix = "_light")
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-notnight-mdpi")
+    fun compact_connected_light() = capture(RemoteLayout.COMPACT, connected = true, suffix = "_light")
+
+    @Test
+    @Config(qualifiers = "w891dp-h411dp-night-mdpi")
     fun medium_disconnected() = capture(RemoteLayout.MEDIUM, connected = false)
 
     @Test
-    @Config(qualifiers = "w891dp-h411dp-mdpi")
+    @Config(qualifiers = "w891dp-h411dp-night-mdpi")
     fun medium_connected() = capture(RemoteLayout.MEDIUM, connected = true)
 
     @Test
-    @Config(qualifiers = "w1280dp-h800dp-mdpi")
+    @Config(qualifiers = "w1280dp-h800dp-night-mdpi")
     fun expanded_disconnected() = capture(RemoteLayout.EXPANDED, connected = false)
 
     @Test
-    @Config(qualifiers = "w1280dp-h800dp-mdpi")
+    @Config(qualifiers = "w1280dp-h800dp-night-mdpi")
     fun expanded_connected() = capture(RemoteLayout.EXPANDED, connected = true)
 
     @Test
-    @Config(qualifiers = "w411dp-h891dp-mdpi")
+    @Config(qualifiers = "w411dp-h891dp-night-mdpi")
     fun tabletop_disconnected() = capture(RemoteLayout.TABLETOP, connected = false)
 
     @Test
-    @Config(qualifiers = "w411dp-h891dp-mdpi")
+    @Config(qualifiers = "w411dp-h891dp-night-mdpi")
     fun tabletop_connected() = capture(RemoteLayout.TABLETOP, connected = true)
 
     @Test
-    @Config(qualifiers = "w411dp-h891dp-mdpi")
+    @Config(qualifiers = "w411dp-h891dp-night-mdpi")
     fun connection_guide_compact() {
         composeRule.setContent {
             UniRemoteTheme { ConnectionGuideScreen(onBack = {}) }
@@ -144,7 +153,7 @@ class UniRemoteAppScreenshotTest {
     }
 
     @Test
-    @Config(qualifiers = "w411dp-h891dp-mdpi")
+    @Config(qualifiers = "w411dp-h891dp-night-mdpi")
     fun pairing_failed_host_rejected_compact() {
         session.setState(TransportState.Failed(TransportError.HOST_REJECTED), target)
         composeRule.setContent {
@@ -161,7 +170,7 @@ class UniRemoteAppScreenshotTest {
     }
 
     @Test
-    @Config(qualifiers = "w411dp-h891dp-mdpi")
+    @Config(qualifiers = "w411dp-h891dp-night-mdpi")
     fun pairing_reconnecting_compact() {
         session.setState(TransportState.Reconnecting(target, attempt = 2, maxAttempts = 3), target)
         composeRule.setContent {
@@ -178,7 +187,7 @@ class UniRemoteAppScreenshotTest {
     }
 
     @Test
-    @Config(qualifiers = "w411dp-h891dp-mdpi")
+    @Config(qualifiers = "w411dp-h891dp-night-mdpi")
     fun open_source_licenses_compact() {
         composeRule.setContent {
             UniRemoteTheme { OpenSourceLicensesScreen(onBack = {}) }

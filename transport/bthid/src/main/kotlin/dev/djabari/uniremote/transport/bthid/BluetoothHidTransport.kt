@@ -81,6 +81,14 @@ class BluetoothHidTransport(
     private var externalFailure: TransportError? = null
 
     /**
+     * Mouse buttons currently held, as a report bitmask. Every mouse report carries the full
+     * button state, so moves, scrolls and the keep-alive must repeat it or they would release
+     * a button the user is still holding down (dragging with a held left click).
+     */
+    @Volatile
+    private var heldButtons: Int = 0
+
+    /**
      * Serialises report writes. Prevents interleaving presses and releases which causes
      * stuck modifiers and uncontrolled repeat scrolling.
      */
@@ -109,6 +117,7 @@ class BluetoothHidTransport(
                 BluetoothProfile.STATE_CONNECTED -> {
                     connectedDevice = device
                     consecutiveWriteFailures = 0
+                    heldButtons = 0
                     _state.value = TransportState.Connected(target)
                     _capabilities.value = HID_CAPABILITIES
                     attemptInFlight = false
@@ -311,18 +320,19 @@ class BluetoothHidTransport(
     override suspend fun sendPointer(event: PointerEvent): Result<Unit> = reportLock.withLock {
         when (event) {
             is PointerEvent.Move ->
-                write(HidDescriptor.REPORT_ID_MOUSE, HidReport.mouse(buttons = 0, delta = event.delta))
+                write(HidDescriptor.REPORT_ID_MOUSE, HidReport.mouse(heldButtons, event.delta))
             is PointerEvent.Button -> {
-                val mask = if (event.pressed) 1 shl event.button.ordinal else 0
+                val bit = 1 shl event.button.ordinal
+                heldButtons = if (event.pressed) heldButtons or bit else heldButtons and bit.inv()
                 write(
                     HidDescriptor.REPORT_ID_MOUSE,
-                    HidReport.mouse(mask, PointerDelta.IDLE),
+                    HidReport.mouse(heldButtons, PointerDelta.IDLE),
                 )
             }
             is PointerEvent.Scroll ->
                 write(
                     HidDescriptor.REPORT_ID_MOUSE,
-                    HidReport.mouse(0, PointerDelta.clamped(0, 0, event.ticks)),
+                    HidReport.mouse(heldButtons, PointerDelta.clamped(0, 0, event.ticks)),
                 )
         }
     }
@@ -408,9 +418,9 @@ class BluetoothHidTransport(
     /**
      * Some TVs drop an idle HID link after 30-60s, so keep traffic on it.
      *
-     * The filler is a zero mouse report, not an empty keyboard report: an empty keyboard
-     * report means "all keys up" and would silently cancel a key held through
-     * [KeyAction.PRESS].
+     * The filler is a motionless mouse report, not an empty keyboard report: an empty
+     * keyboard report means "all keys up" and would silently cancel a key held through
+     * [KeyAction.PRESS]. It repeats [heldButtons] for the same reason.
      */
     private fun startKeepAlive() {
         keepAliveJob?.cancel()
@@ -420,7 +430,7 @@ class BluetoothHidTransport(
                 reportLock.withLock {
                     write(
                         HidDescriptor.REPORT_ID_MOUSE,
-                        HidReport.mouse(buttons = 0, delta = PointerDelta.IDLE),
+                        HidReport.mouse(heldButtons, PointerDelta.IDLE),
                     )
                 }
             }
@@ -435,6 +445,8 @@ class BluetoothHidTransport(
     private fun releaseAll(device: BluetoothDevice?) {
         write(HidDescriptor.REPORT_ID_KEYBOARD, HidReport.KEYBOARD_RELEASE, device)
         write(HidDescriptor.REPORT_ID_CONSUMER, HidReport.CONSUMER_RELEASE, device)
+        heldButtons = 0
+        write(HidDescriptor.REPORT_ID_MOUSE, HidReport.mouse(0, PointerDelta.IDLE), device)
     }
 
     private fun write(

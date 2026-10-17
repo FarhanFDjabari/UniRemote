@@ -1,6 +1,7 @@
 package dev.djabari.uniremote.transport.network
 
 import com.google.common.truth.Truth.assertThat
+import dev.djabari.uniremote.model.KeyAction
 import dev.djabari.uniremote.model.RemoteKey
 import dev.djabari.uniremote.model.RemoteTarget
 import dev.djabari.uniremote.model.TvBrand
@@ -19,6 +20,7 @@ class NetworkTransportTest {
     ) : BrandAdapter {
         var identifyCalls = 0
         var connectCalls = 0
+        val sentKeys = mutableListOf<RemoteKey>()
 
         override val capabilities: Set<TransportCapability> =
             setOf(TransportCapability.DPAD, TransportCapability.POWER_ON)
@@ -35,7 +37,10 @@ class NetworkTransportTest {
             return connectResult
         }
 
-        override suspend fun send(key: RemoteKey): Result<Unit> = Result.success(Unit)
+        override suspend fun send(key: RemoteKey): Result<Unit> {
+            sentKeys += key
+            return Result.success(Unit)
+        }
         override suspend fun sendText(text: String): Result<Unit> = Result.success(Unit)
         override suspend fun wakeOnLan(mac: String): Result<Unit> = Result.success(Unit)
         override suspend fun disconnect() = Unit
@@ -67,6 +72,19 @@ class NetworkTransportTest {
         assertThat(transport.supports(target(brand = TvBrand.ROKU, ip = null, mac = "AA:BB:CC:DD:EE:FF"))).isTrue()
         assertThat(transport.supports(target(brand = TvBrand.UNKNOWN, ip = null, mac = "AA:BB:CC:DD:EE:FF"))).isTrue()
         assertThat(transport.supports(target(brand = TvBrand.UNKNOWN, ip = null))).isFalse()
+    }
+
+    @Test
+    fun `a held key is sent once on press and not again on release`() = runTest {
+        val roku = FakeAdapter(TvBrand.ROKU)
+        val transport = NetworkTransport(listOf(roku))
+        transport.connect(target())
+
+        transport.sendKey(RemoteKey.DPAD_CENTER, KeyAction.PRESS)
+        val release = transport.sendKey(RemoteKey.DPAD_CENTER, KeyAction.RELEASE)
+
+        assertThat(release.isSuccess).isTrue()
+        assertThat(roku.sentKeys).containsExactly(RemoteKey.DPAD_CENTER)
     }
 
     @Test

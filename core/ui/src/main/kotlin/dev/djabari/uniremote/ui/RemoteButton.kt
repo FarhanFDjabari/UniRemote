@@ -24,6 +24,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -44,11 +45,15 @@ import kotlinx.coroutines.launch
 /**
  * UniRemote button with haptic feedback, long-press repeat ramp (500ms then 80ms),
  * and accessibility TalkBack metadata.
+ *
+ * [onClick] fires on touch down. Pass [onRelease] to also hear when the press ends, so a
+ * hold can be forwarded to the TV as press-then-release instead of a tap.
  */
 @Composable
 fun RemoteButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onRelease: (() -> Unit)? = null,
     enabled: Boolean = true,
     repeatable: Boolean = false,
     contentDescription: String? = null,
@@ -69,6 +74,9 @@ fun RemoteButton(
     val ownedInteractionSource = remember { MutableInteractionSource() }
     val effectiveInteractionSource = interactionSource ?: ownedInteractionSource
     val isPressed by effectiveInteractionSource.collectIsPressedAsState()
+    // Read through state: keying pointerInput on the lambda would restart the gesture on
+    // recomposition and release a hold the user has not let go of.
+    val currentOnRelease by rememberUpdatedState(onRelease)
 
     val containerColor = if (enabled) {
         if (isPressed) colors.containerColor.copy(alpha = 0.8f) else colors.containerColor
@@ -129,12 +137,14 @@ fun RemoteButton(
                                 // The gesture can be cancelled outright — disabling the button
                                 // swaps this modifier away mid-press — and then the lines above
                                 // never run. Without this the repeat job outlives the gesture
-                                // and keeps firing keys at the TV, and the press interaction
-                                // never ends, leaving the button stuck looking pressed.
+                                // and keeps firing keys at the TV, the press interaction never
+                                // ends, leaving the button stuck looking pressed, and a held key
+                                // is never released on the TV.
                                 repeatJob?.cancel()
                                 if (!pressEnded) {
                                     effectiveInteractionSource.tryEmit(PressInteraction.Cancel(press))
                                 }
+                                currentOnRelease?.invoke()
                             }
                         }
                     }
