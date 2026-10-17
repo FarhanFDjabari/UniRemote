@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Dark-first: this app is used in dark rooms. -->
-    <style name="Theme.UniRemote" parent="android:Theme.Material.NoActionBar" />
+    <!-- Follows the system theme; values-night holds the AMOLED-black variant. -->
+    <style name="Theme.UniRemote" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+    </style>
 </resources>
