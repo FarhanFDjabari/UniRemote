@@ -144,7 +144,12 @@ class NetworkTransport(
         val adapter = activeAdapter
             ?: return Result.failure(IllegalStateException("No connected network adapter"))
 
-        return adapter.send(key)
+        // Brand APIs only offer discrete key presses, so a hold degrades to a tap on press;
+        // sending again on release would press the key twice.
+        return when (action) {
+            KeyAction.TAP, KeyAction.PRESS -> adapter.send(key)
+            KeyAction.RELEASE -> Result.success(Unit)
+        }
     }
 
     override suspend fun sendText(text: String): Result<Unit> {
