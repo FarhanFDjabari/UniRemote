@@ -1,5 +1,6 @@
 package dev.djabari.uniremote.transport.network.adapters
 
+import dev.djabari.uniremote.model.KeyAction
 import dev.djabari.uniremote.model.RemoteKey
 import dev.djabari.uniremote.model.RemoteTarget
 import dev.djabari.uniremote.model.TvBrand
@@ -72,14 +73,22 @@ class RokuAdapter(
         }
     }.getOrDefault(false)
 
-    override suspend fun send(key: RemoteKey): Result<Unit> = withContext(Dispatchers.IO) {
+    override suspend fun send(key: RemoteKey): Result<Unit> = send(key, KeyAction.TAP)
+
+    /** ECP has real key-down and key-up commands, so a hold reaches the Roku as a hold. */
+    override suspend fun send(key: RemoteKey, action: KeyAction): Result<Unit> = withContext(Dispatchers.IO) {
         val ip = activeTarget?.ipAddress
             ?: return@withContext Result.failure(IllegalStateException("No connected Roku target"))
 
         val command = mapKey(key)
             ?: return@withContext Result.failure(IllegalArgumentException("Unsupported Roku key: $key"))
 
-        postCommand(ip, "keypress/$command")
+        val verb = when (action) {
+            KeyAction.TAP -> "keypress"
+            KeyAction.PRESS -> "keydown"
+            KeyAction.RELEASE -> "keyup"
+        }
+        postCommand(ip, "$verb/$command")
     }
 
     override suspend fun sendText(text: String): Result<Unit> = withContext(Dispatchers.IO) {
