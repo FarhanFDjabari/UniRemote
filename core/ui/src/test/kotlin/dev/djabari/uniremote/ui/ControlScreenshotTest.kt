@@ -89,7 +89,7 @@ class ControlScreenshotTest {
         composeRule.setContent {
             UniRemoteTheme {
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.size(340.dp)) {
-                    DpadControl(onKey = {})
+                    DpadControl(onKey = {}, onCenterPress = {}, onCenterRelease = {})
                 }
             }
         }
@@ -101,7 +101,7 @@ class ControlScreenshotTest {
         composeRule.setContent {
             UniRemoteTheme {
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.size(340.dp)) {
-                    DpadControl(onKey = {}, enabled = false)
+                    DpadControl(onKey = {}, onCenterPress = {}, onCenterRelease = {}, enabled = false)
                 }
             }
         }

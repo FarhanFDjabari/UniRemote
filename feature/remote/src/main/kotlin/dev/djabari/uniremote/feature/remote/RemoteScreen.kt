@@ -196,6 +196,8 @@ fun RemoteScreen(
 
         DpadControl(
             onKey = { viewModel.onKeyTap(it) },
+            onCenterPress = { viewModel.onKeyPress(RemoteKey.DPAD_CENTER) },
+            onCenterRelease = { viewModel.onKeyRelease(RemoteKey.DPAD_CENTER) },
             enabled = isConnected && capabilities.contains(TransportCapability.DPAD),
             modifier = sectionModifier.padding(vertical = 4.dp),
         )

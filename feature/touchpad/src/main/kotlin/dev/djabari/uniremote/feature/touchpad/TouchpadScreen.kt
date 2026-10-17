@@ -76,13 +76,15 @@ fun TouchpadScreen(
             )
         }
 
-        // Physical Click Buttons Fallback
+        // Physical click buttons. Left Click holds for as long as it is pressed, so it can
+        // long-press, or drag with a second finger on the touchpad.
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             RemoteButton(
-                onClick = { viewModel.onTap() },
+                onClick = { viewModel.onPrimaryPress() },
+                onRelease = { viewModel.onPrimaryRelease() },
                 enabled = isConnected && isSupported,
                 contentDescription = "Left Click",
                 shape = RoundedCornerShape(16.dp),

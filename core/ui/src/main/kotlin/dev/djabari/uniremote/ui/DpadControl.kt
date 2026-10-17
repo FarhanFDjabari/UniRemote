@@ -31,10 +31,15 @@ import dev.djabari.uniremote.model.RemoteKey
  * Sizes itself from available space (min 160dp, max 320dp) with 5 discrete buttons
  * positioned in an ergonomic layout, providing full TalkBack accessibility,
  * haptic clicks, and long-press repeat ramp.
+ *
+ * The arrows repeat through [onKey]. The centre reports press and release separately so a
+ * hold reaches the TV as a long press, which opens context menus on most TV launchers.
  */
 @Composable
 fun DpadControl(
     onKey: (RemoteKey) -> Unit,
+    onCenterPress: () -> Unit,
+    onCenterRelease: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
@@ -127,7 +132,8 @@ fun DpadControl(
 
             // CENTER (OK)
             RemoteButton(
-                onClick = { onKey(RemoteKey.DPAD_CENTER) },
+                onClick = onCenterPress,
+                onRelease = onCenterRelease,
                 enabled = enabled,
                 repeatable = false,
                 contentDescription = "Select or OK",
