@@ -1,6 +1,7 @@
 package dev.djabari.uniremote.session
 
 import android.annotation.SuppressLint
+import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -15,6 +16,7 @@ import android.content.pm.ServiceInfo
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.os.Process
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import dev.djabari.uniremote.common.PermissionUtils
@@ -51,6 +53,7 @@ class RemoteSessionService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var stateObserverJob: Job? = null
     private var eventReceiver: BluetoothEventReceiver? = null
+    private var isQuitting = false
 
     private val binder = LocalBinder()
 
@@ -83,6 +86,13 @@ class RemoteSessionService : Service() {
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Checked before the permission gate so the user can always quit, even after
+        // revoking Nearby Devices.
+        if (intent?.action == ACTION_QUIT) {
+            quit()
+            return START_NOT_STICKY
+        }
+
         if (!PermissionUtils.hasBluetoothPermissions(this)) {
             stopSelf(startId)
             return START_NOT_STICKY
@@ -111,6 +121,17 @@ class RemoteSessionService : Service() {
         return START_STICKY
     }
 
+    /**
+     * Closes the app instead of leaving it on standby: removes its task from Recents, drops
+     * the foreground service, and lets [onDestroy] tear the session down and end the process.
+     */
+    private fun quit() {
+        isQuitting = true
+        getSystemService(ActivityManager::class.java).appTasks.forEach { it.finishAndRemoveTask() }
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
     private fun observeSessionState() {
         stateObserverJob = serviceScope.launch {
             session.state.collect { state ->
@@ -129,6 +150,12 @@ class RemoteSessionService : Service() {
             this,
             0,
             disconnectIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val quitPendingIntent = PendingIntent.getService(
+            this,
+            1,
+            Intent(this, RemoteSessionService::class.java).apply { action = ACTION_QUIT },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
@@ -152,6 +179,11 @@ class RemoteSessionService : Service() {
                 android.R.drawable.ic_menu_close_clear_cancel,
                 "Disconnect",
                 disconnectPendingIntent,
+            )
+            .addAction(
+                android.R.drawable.ic_lock_power_off,
+                "Quit",
+                quitPendingIntent,
             )
             .build()
     }
@@ -187,12 +219,17 @@ class RemoteSessionService : Service() {
         profileManager.close()
 
         super.onDestroy()
+
+        // Ending the process makes the next launch a cold start, so it reconnects to the last
+        // TV as usual instead of remembering the disconnect that quitting implies.
+        if (isQuitting) Process.killProcess(Process.myPid())
     }
 
     companion object {
         const val NOTIFICATION_ID = 1001
         const val CHANNEL_ID = "uniremote_session"
         const val ACTION_DISCONNECT = "dev.djabari.uniremote.action.DISCONNECT"
+        const val ACTION_QUIT = "dev.djabari.uniremote.action.QUIT"
         private const val DISCONNECT_TIMEOUT_MS = 2_000L
     }
 }

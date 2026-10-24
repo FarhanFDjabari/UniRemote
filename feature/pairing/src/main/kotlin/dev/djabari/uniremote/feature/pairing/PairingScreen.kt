@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -80,6 +81,7 @@ fun PairingScreen(
     viewModel: PairingViewModel,
     onOpenGuide: () -> Unit = {},
     onOpenLicenses: () -> Unit = {},
+    onQuit: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val connection by viewModel.connection.collectAsState()
@@ -342,6 +344,20 @@ fun PairingScreen(
                     .testTag("pairing-open-licenses"),
             ) {
                 Text("Open-source licenses")
+            }
+        }
+
+        // Quit Entry
+        item {
+            TextButton(
+                onClick = onQuit,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("pairing-quit"),
+            ) {
+                Icon(Icons.Default.PowerSettingsNew, contentDescription = null)
+                Spacer(modifier = Modifier.size(8.dp))
+                Text("Quit UniRemote")
             }
         }
     }
