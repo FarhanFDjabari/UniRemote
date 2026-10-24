@@ -85,6 +85,7 @@ fun UniRemoteApp(
     pairingViewModel: PairingViewModel,
     modifier: Modifier = Modifier,
     layout: RemoteLayout = rememberRemoteLayout(),
+    onQuit: () -> Unit = {},
 ) {
     var currentDestination by remember { mutableStateOf(RemoteDestination.REMOTE) }
     var overlay by rememberSaveable { mutableStateOf<Overlay?>(null) }
@@ -115,6 +116,7 @@ fun UniRemoteApp(
                         pairingViewModel = pairingViewModel,
                         onOpenGuide = { overlay = Overlay.GUIDE },
                         onOpenLicenses = { overlay = Overlay.LICENSES },
+                        onQuit = onQuit,
                     )
                     RemoteLayout.MEDIUM -> MediumScaffold(
                         currentDestination = currentDestination,
@@ -126,6 +128,7 @@ fun UniRemoteApp(
                         pairingViewModel = pairingViewModel,
                         onOpenGuide = { overlay = Overlay.GUIDE },
                         onOpenLicenses = { overlay = Overlay.LICENSES },
+                        onQuit = onQuit,
                     )
                     RemoteLayout.EXPANDED -> ExpandedScaffold(
                         connection = connection,
@@ -135,6 +138,7 @@ fun UniRemoteApp(
                         pairingViewModel = pairingViewModel,
                         onOpenGuide = { overlay = Overlay.GUIDE },
                         onOpenLicenses = { overlay = Overlay.LICENSES },
+                        onQuit = onQuit,
                     )
                     RemoteLayout.TABLETOP -> TabletopScaffold(
                         remoteViewModel = remoteViewModel,
@@ -158,6 +162,7 @@ private fun CompactScaffold(
     pairingViewModel: PairingViewModel,
     onOpenGuide: () -> Unit,
     onOpenLicenses: () -> Unit,
+    onQuit: () -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -202,6 +207,7 @@ private fun CompactScaffold(
                     viewModel = pairingViewModel,
                     onOpenGuide = onOpenGuide,
                     onOpenLicenses = onOpenLicenses,
+                    onQuit = onQuit,
                 )
             }
         }
@@ -219,6 +225,7 @@ private fun MediumScaffold(
     pairingViewModel: PairingViewModel,
     onOpenGuide: () -> Unit,
     onOpenLicenses: () -> Unit,
+    onQuit: () -> Unit,
 ) {
     Row(modifier = Modifier.fillMaxSize()) {
         NavigationRail(
@@ -261,6 +268,7 @@ private fun MediumScaffold(
                     viewModel = pairingViewModel,
                     onOpenGuide = onOpenGuide,
                     onOpenLicenses = onOpenLicenses,
+                    onQuit = onQuit,
                 )
                 RemoteDestination.REMOTE -> TouchpadScreen(touchpadViewModel)
             }
@@ -277,6 +285,7 @@ private fun ExpandedScaffold(
     pairingViewModel: PairingViewModel,
     onOpenGuide: () -> Unit,
     onOpenLicenses: () -> Unit,
+    onQuit: () -> Unit,
 ) {
     Row(modifier = Modifier.fillMaxSize()) {
         // Pane 1: Connection status & target management
@@ -299,6 +308,7 @@ private fun ExpandedScaffold(
                 viewModel = pairingViewModel,
                 onOpenGuide = onOpenGuide,
                 onOpenLicenses = onOpenLicenses,
+                onQuit = onQuit,
             )
         }
 

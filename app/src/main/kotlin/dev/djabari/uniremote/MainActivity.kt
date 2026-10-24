@@ -65,6 +65,7 @@ class MainActivity : ComponentActivity() {
                 touchpadViewModel = touchpadViewModel,
                 keyboardViewModel = keyboardViewModel,
                 pairingViewModel = pairingViewModel,
+                onQuit = ::quit,
             )
         }
     }
@@ -82,6 +83,12 @@ class MainActivity : ComponentActivity() {
 
     private fun reconnectSession() {
         lifecycleScope.launch { session.reconnect() }
+    }
+
+    private fun quit() {
+        startService(
+            Intent(this, RemoteSessionService::class.java).setAction(RemoteSessionService.ACTION_QUIT),
+        )
     }
 
     private fun startSessionService() {
