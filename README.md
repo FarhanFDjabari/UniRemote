@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/app-icon.svg" alt="UniRemote app icon" width="128" height="128">
+</p>
+
 # UniRemote
 
 UniRemote turns an Android phone or tablet into a capable TV remote. It uses Bluetooth
