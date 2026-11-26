@@ -5,8 +5,7 @@ import dev.djabari.uniremote.transport.*
 import kotlinx.coroutines.flow.*
 
 /**
- * The single surface the UI talks to. Features never import a transport implementation —
- * that is what keeps Phase 4 from rippling into every screen.
+ * The single surface the UI talks to. Features never import a transport implementation.
  */
 interface RemoteSession {
     val state: StateFlow<TransportState>
@@ -30,23 +29,10 @@ interface RemoteSession {
     suspend fun pointer(event: PointerEvent): Result<Unit>
 }
 
-/**
- * Picks a transport for a target and falls back when the preferred one fails.
- *
- * Order: explicit user preference -> BT HID (if the brand accepts it) -> network.
- * A [TransportError.HID_REGISTRATION_FAILED] is the signal to demote BT HID for this
- * device permanently, not to retry.
- */
+/** Picks the transports that can reach a target, in the order they are tried. */
 class TransportSelector(
     private val transports: List<RemoteTransport>,
 ) {
-    fun candidatesFor(target: RemoteTarget): List<RemoteTransport> = buildList {
-        target.preferredTransport
-            ?.let { pref -> transports.firstOrNull { it.id == pref } }
-            ?.let(::add)
-        transports
-            .filter { it.supports(target) && it !in this }
-            .sortedBy { if (it.id == TransportId.BLUETOOTH_HID) 0 else 1 }
-            .let(::addAll)
-    }
+    fun candidatesFor(target: RemoteTarget): List<RemoteTransport> =
+        transports.filter { it.supports(target) }
 }

@@ -1,7 +1,6 @@
 package dev.djabari.uniremote.session
 
 import dev.djabari.uniremote.model.RemoteTarget
-import dev.djabari.uniremote.model.TransportId
 import dev.djabari.uniremote.model.TvBrand
 import org.json.JSONArray
 import org.json.JSONObject
@@ -10,6 +9,9 @@ import org.json.JSONObject
  * Saved targets are stored as JSON rather than a delimited string: TV names are
  * user-editable and routinely contain punctuation, which a delimiter scheme silently
  * corrupts.
+ *
+ * Entries without a Bluetooth address were saved by the removed Wi-Fi transport. Nothing can
+ * reach them any more, so decoding drops them.
  */
 internal object TargetCodec {
 
@@ -21,10 +23,7 @@ internal object TargetCodec {
                     .put("id", target.id)
                     .put("displayName", target.displayName)
                     .put("brand", target.brand.name)
-                    .put("bluetoothAddress", target.bluetoothAddress)
-                    .put("ipAddress", target.ipAddress)
-                    .put("macAddress", target.macAddress)
-                    .put("preferredTransport", target.preferredTransport?.value),
+                    .put("bluetoothAddress", target.bluetoothAddress),
             )
         }
         return array.toString()
@@ -37,14 +36,12 @@ internal object TargetCodec {
         return (0 until array.length()).mapNotNull { index ->
             val entry = array.optJSONObject(index) ?: return@mapNotNull null
             val id = entry.optString("id").ifBlank { return@mapNotNull null }
+            val bluetoothAddress = entry.optStringOrNull("bluetoothAddress") ?: return@mapNotNull null
             RemoteTarget(
                 id = id,
                 displayName = entry.optString("displayName").ifBlank { id },
                 brand = runCatching { TvBrand.valueOf(entry.optString("brand")) }.getOrDefault(TvBrand.UNKNOWN),
-                bluetoothAddress = entry.optStringOrNull("bluetoothAddress"),
-                ipAddress = entry.optStringOrNull("ipAddress"),
-                macAddress = entry.optStringOrNull("macAddress"),
-                preferredTransport = entry.optStringOrNull("preferredTransport")?.let(::TransportId),
+                bluetoothAddress = bluetoothAddress,
             )
         }
     }

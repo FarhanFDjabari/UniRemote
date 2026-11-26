@@ -4,24 +4,18 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import dev.djabari.uniremote.model.RemoteTarget
 import dev.djabari.uniremote.model.TvBrand
-import dev.djabari.uniremote.transport.network.discovery.NetworkDiscovery
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Every way the app can find a TV, behind one surface so feature modules never touch a
- * Bluetooth adapter or a discovery protocol directly.
+ * Finds TVs behind one surface so feature modules never touch a Bluetooth adapter directly.
  */
 @Singleton
 class DeviceDiscovery @Inject constructor(
-    private val networkDiscovery: NetworkDiscovery,
     private val bluetoothAdapter: BluetoothAdapter?,
 ) {
 
-    /**
-     * TVs already bonded with the phone. Bonded devices are the ones BT HID can reach, so
-     * this is the primary list; scanning is for the network fallback.
-     */
+    /** TVs already bonded with the phone — the only ones BT HID can reach. */
     @SuppressLint("MissingPermission")
     fun bondedTargets(): List<RemoteTarget> {
         val adapter = bluetoothAdapter ?: return emptyList()
@@ -38,8 +32,6 @@ class DeviceDiscovery @Inject constructor(
             emptyList()
         }
     }
-
-    suspend fun scanNetwork(): List<RemoteTarget> = networkDiscovery.scan()
 
     private fun brandOf(name: String?): TvBrand {
         val lower = name?.lowercase() ?: return TvBrand.GENERIC

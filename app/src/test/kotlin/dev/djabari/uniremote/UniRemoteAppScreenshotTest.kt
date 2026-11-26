@@ -23,8 +23,6 @@ import dev.djabari.uniremote.session.TargetRepository
 import dev.djabari.uniremote.transport.TransportCapability
 import dev.djabari.uniremote.transport.TransportError
 import dev.djabari.uniremote.transport.TransportState
-import dev.djabari.uniremote.transport.network.discovery.MdnsDiscovery
-import dev.djabari.uniremote.transport.network.discovery.NetworkDiscovery
 import dev.djabari.uniremote.ui.RemoteLayout
 import dev.djabari.uniremote.ui.theme.UniRemoteTheme
 import org.junit.Rule
@@ -96,7 +94,7 @@ class UniRemoteAppScreenshotTest {
         return PairingViewModel(
             session,
             TargetRepository(context),
-            DeviceDiscovery(NetworkDiscovery(MdnsDiscovery(context)), null),
+            DeviceDiscovery(null),
         )
     }
 

@@ -56,8 +56,6 @@ object RemoteKeyMapping {
         RemoteKey.NEXT_TRACK to HidBinding.Consumer(ConsumerUsage.SCAN_NEXT),
         RemoteKey.PREV_TRACK to HidBinding.Consumer(ConsumerUsage.SCAN_PREV),
 
-        // POWER_ON is deliberately absent: a TV with its radio off cannot receive HID.
-        // The BT transport does not advertise the POWER_ON capability.
         RemoteKey.POWER_OFF to HidBinding.Consumer(ConsumerUsage.POWER),
 
         RemoteKey.BACKSPACE to HidBinding.Keyboard(KeyboardUsage.BACKSPACE),

@@ -5,10 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.djabari.uniremote.feature.keyboard.KeyboardViewModel
@@ -25,23 +23,20 @@ import dev.djabari.uniremote.session.RemoteSession
 import dev.djabari.uniremote.session.TargetRepository
 import dev.djabari.uniremote.transport.TransportCapability
 import dev.djabari.uniremote.transport.TransportState
-import dev.djabari.uniremote.transport.network.discovery.MdnsDiscovery
-import dev.djabari.uniremote.transport.network.discovery.NetworkDiscovery
 import dev.djabari.uniremote.ui.RemoteLayout
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Device-backed happy path for a Wake-on-LAN-only TV: add a MAC-only generic target,
- * connect it, then send its power-on command from the remote screen.
+ * Device-backed happy path for a saved Bluetooth TV: pick it on the Pairing tab, connect,
+ * then send a key from the remote screen.
  */
 @RunWith(AndroidJUnit4::class)
 class PairingJourneyTest {
@@ -60,13 +55,10 @@ class PairingJourneyTest {
     fun setUp() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         repository = TargetRepository(context)
-        runBlocking { repository.removeTarget(WAKE_ON_LAN_MAC) }
+        runBlocking { repository.saveTarget(SAVED_TARGET) }
 
         session = JourneyRemoteSession()
-        val discovery = DeviceDiscovery(
-            networkDiscovery = NetworkDiscovery(MdnsDiscovery(context)),
-            bluetoothAdapter = null,
-        )
+        val discovery = DeviceDiscovery(bluetoothAdapter = null)
         remoteViewModel = RemoteViewModel(session)
         touchpadViewModel = TouchpadViewModel(session)
         keyboardViewModel = KeyboardViewModel(session)
@@ -85,42 +77,28 @@ class PairingJourneyTest {
 
     @After
     fun tearDown() {
-        runBlocking { repository.removeTarget(WAKE_ON_LAN_MAC) }
+        runBlocking { repository.removeTarget(SAVED_TARGET.id) }
     }
 
     @Test
-    fun addMacOnlyGenericTarget_connectAndPowerOn() {
+    fun connectSavedBluetoothTarget_andPowerOff() {
         // The navigation item merges its icon and label, so the icon's description
         // is only reachable in the unmerged tree.
         composeRule.onNodeWithContentDescription("Pairing", useUnmergedTree = true).performClick()
         composeRule.onNodeWithText("No TV Connected").assertIsDisplayed()
 
-        composeRule.onNodeWithTag("pairing-add-tv").performClick()
-        composeRule.onNodeWithText("Add TV Target").assertIsDisplayed()
-
-        composeRule.onNodeWithTag("pairing-tv-name").performTextInput("Bedroom TV")
-        composeRule.onNodeWithTag("pairing-brand").performClick()
-        composeRule.onNodeWithText("GENERIC").performClick()
-        composeRule.onNodeWithTag("pairing-mac-address").performTextInput(WAKE_ON_LAN_MAC)
-        composeRule.onNodeWithTag("pairing-add-and-connect").performClick()
+        composeRule.onNodeWithText(SAVED_TARGET.displayName).performClick()
 
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            session.connectedTarget?.id == WAKE_ON_LAN_MAC
+            session.connectedTarget?.id == SAVED_TARGET.id
         }
+        assertEquals(SAVED_TARGET, session.connectedTarget)
+        composeRule.onNodeWithText("Connected: ${SAVED_TARGET.displayName}").assertIsDisplayed()
 
-        val target = requireNotNull(session.connectedTarget)
-        assertEquals("Bedroom TV", target.displayName)
-        assertEquals(TvBrand.GENERIC, target.brand)
-        assertNull(target.ipAddress)
-        assertEquals(WAKE_ON_LAN_MAC, target.macAddress)
-        composeRule.onNodeWithText("Connected: Bedroom TV").assertIsDisplayed()
-
-        // The navigation item merges its icon and label, so the icon's description
-        // is only reachable in the unmerged tree.
         composeRule.onNodeWithContentDescription("Remote", useUnmergedTree = true).performClick()
-        composeRule.onNodeWithContentDescription("Power On (Wake-on-LAN)").performClick()
+        composeRule.onNodeWithContentDescription("Power Off").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            session.lastPressedKey == RemoteKey.POWER_ON
+            session.lastPressedKey == RemoteKey.POWER_OFF
         }
     }
 
@@ -145,7 +123,7 @@ class PairingJourneyTest {
         override suspend fun connect(target: RemoteTarget): Result<Unit> {
             connectedTarget = target
             _activeTarget.value = target
-            _capabilities.value = setOf(TransportCapability.POWER_ON)
+            _capabilities.value = setOf(TransportCapability.POWER_OFF)
             _state.value = TransportState.Connected(target)
             return Result.success(Unit)
         }
@@ -174,6 +152,11 @@ class PairingJourneyTest {
     }
 
     private companion object {
-        const val WAKE_ON_LAN_MAC = "02:00:00:00:00:01"
+        val SAVED_TARGET = RemoteTarget(
+            id = "02:00:00:00:00:01",
+            displayName = "Bedroom TV",
+            brand = TvBrand.GENERIC,
+            bluetoothAddress = "02:00:00:00:00:01",
+        )
     }
 }

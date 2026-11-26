@@ -14,8 +14,8 @@ android {
         applicationId = "dev.djabari.uniremote"
         minSdk = 28              // BluetoothHidDevice is API 28+. Hard floor.
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.3.0"
+        versionCode = 8
+        versionName = "1.4.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -89,12 +89,8 @@ dependencies {
     testImplementation(libs.roborazzi.compose)
     debugImplementation(libs.compose.ui.test.manifest)
 
-    // Screenshot-test scaffolding constructs the PairingViewModel dependencies directly.
-    testImplementation(project(":transport:network"))
-
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.compose.ui.test.junit4)
-    androidTestImplementation(project(":transport:network"))
 }

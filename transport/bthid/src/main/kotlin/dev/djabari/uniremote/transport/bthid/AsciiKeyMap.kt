@@ -6,7 +6,6 @@ package dev.djabari.uniremote.transport.bthid
  * HID keyboards transmit *physical key positions*, not characters, so this map is
  * inherently US-QWERTY-shaped and inherently ASCII-only. Anything outside ASCII returns
  * null and the keyboard screen must tell the user so rather than silently dropping input.
- * Unicode text is a network-transport capability ([TransportCapability.UNICODE_TEXT]).
  */
 object AsciiKeyMap {
 
