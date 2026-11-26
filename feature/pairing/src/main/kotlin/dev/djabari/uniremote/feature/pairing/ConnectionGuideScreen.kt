@@ -122,8 +122,7 @@ fun ConnectionGuideScreen(
                                 "in the TV's Bluetooth settings and pair again while UniRemote is open.",
                         )
                         BulletLine(
-                            "Android TV and Google TV are controlled over Bluetooth. Over Wi-Fi, UniRemote can " +
-                                "only wake them (Wake-on-LAN), which needs the TV's MAC address.",
+                            "Roku doesn't accept a Bluetooth remote, so UniRemote can't control it.",
                         )
                         BulletLine(
                             "Keep the TV within a few metres of your phone with nothing blocking the signal.",

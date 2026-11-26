@@ -95,7 +95,7 @@ fun RemoteScreen(
     ) {
         val sectionModifier = Modifier.widthIn(max = RemoteMaxWidth).fillMaxWidth()
 
-        // Power, numpad toggle, wake
+        // Power, numpad toggle
         Row(
             modifier = sectionModifier,
             horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
@@ -114,19 +114,6 @@ fun RemoteScreen(
                 Icon(Icons.Default.PowerSettingsNew, contentDescription = null)
             }
 
-            if (capabilities.contains(TransportCapability.POWER_ON)) {
-                RemoteButton(
-                    onClick = { viewModel.onKeyTap(RemoteKey.POWER_ON) },
-                    contentDescription = "Power On (Wake-on-LAN)",
-                    shape = CircleShape,
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                    ),
-                ) {
-                    Text("ON")
-                }
-            }
 
             if (hasNumpad) {
                 RemoteButton(

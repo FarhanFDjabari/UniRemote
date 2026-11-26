@@ -14,7 +14,6 @@ import dev.djabari.uniremote.transport.RemoteTransport
 import dev.djabari.uniremote.transport.bthid.BluetoothHidTransport
 import dev.djabari.uniremote.transport.bthid.BluetoothLinkEvents
 import dev.djabari.uniremote.transport.bthid.RealHidDeviceProxy
-import dev.djabari.uniremote.transport.network.NetworkTransport
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -72,7 +71,6 @@ abstract class SessionModule {
         @Singleton
         fun provideTransportSelector(
             btHidTransport: BluetoothHidTransport,
-            networkTransport: NetworkTransport,
-        ): TransportSelector = TransportSelector(listOf(btHidTransport, networkTransport))
+        ): TransportSelector = TransportSelector(listOf(btHidTransport))
     }
 }

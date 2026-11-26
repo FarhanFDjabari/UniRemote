@@ -31,48 +31,27 @@ class TransportSelectorTest {
     }
 
     private val btTransport = TestTransport(TransportId.BLUETOOTH_HID, setOf(TvBrand.ANDROID_TV, TvBrand.LG_WEBOS))
-    private val networkTransport = TestTransport(TransportId.NETWORK, setOf(TvBrand.ROKU, TvBrand.ANDROID_TV))
-    private val selector = TransportSelector(listOf(btTransport, networkTransport))
+    private val selector = TransportSelector(listOf(btTransport))
 
     @Test
-    fun `candidatesFor prioritises preferred transport when supported`() {
+    fun `candidatesFor returns the transport that supports the target`() {
         val target = RemoteTarget(
             id = "test-1",
             displayName = "Android TV",
             brand = TvBrand.ANDROID_TV,
-            preferredTransport = TransportId.NETWORK,
         )
 
-        val candidates = selector.candidatesFor(target)
-        assertThat(candidates).hasSize(2)
-        assertThat(candidates[0].id).isEqualTo(TransportId.NETWORK)
-        assertThat(candidates[1].id).isEqualTo(TransportId.BLUETOOTH_HID)
+        assertThat(selector.candidatesFor(target)).containsExactly(btTransport)
     }
 
     @Test
-    fun `candidatesFor falls back to Bluetooth HID first if no preference`() {
+    fun `candidatesFor returns nothing for a target no transport supports`() {
         val target = RemoteTarget(
             id = "test-2",
-            displayName = "Android TV",
-            brand = TvBrand.ANDROID_TV,
-        )
-
-        val candidates = selector.candidatesFor(target)
-        assertThat(candidates).hasSize(2)
-        assertThat(candidates[0].id).isEqualTo(TransportId.BLUETOOTH_HID)
-        assertThat(candidates[1].id).isEqualTo(TransportId.NETWORK)
-    }
-
-    @Test
-    fun `candidatesFor returns only network transport for Roku target`() {
-        val target = RemoteTarget(
-            id = "test-3",
             displayName = "Roku Streaming Stick",
             brand = TvBrand.ROKU,
         )
 
-        val candidates = selector.candidatesFor(target)
-        assertThat(candidates).hasSize(1)
-        assertThat(candidates[0].id).isEqualTo(TransportId.NETWORK)
+        assertThat(selector.candidatesFor(target)).isEmpty()
     }
 }

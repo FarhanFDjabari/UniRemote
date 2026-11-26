@@ -61,11 +61,6 @@ private val openSourceLibraries = listOf(
         url = "https://github.com/Kotlin/kotlinx.coroutines",
     ),
     OpenSourceLibrary(
-        name = "OkHttp",
-        copyright = "Square, Inc.",
-        url = "https://github.com/square/okhttp",
-    ),
-    OpenSourceLibrary(
         name = "Okio",
         copyright = "Square, Inc.",
         url = "https://github.com/square/okio",

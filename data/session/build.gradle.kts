@@ -22,7 +22,6 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     api(project(":transport:api"))
     implementation(project(":transport:bthid"))
-    implementation(project(":transport:network"))
     implementation(project(":core:common"))
     implementation(libs.androidx.lifecycle.service)
     implementation(libs.androidx.datastore.preferences)

@@ -54,13 +54,6 @@ class HidReportTest {
     }
 
     @Test
-    fun `power on has no HID binding`() {
-        // A TV with its radio off cannot receive HID. If this ever passes, someone has
-        // added a binding that will silently do nothing.
-        assertThat(RemoteKeyMapping[RemoteKey.POWER_ON]).isNull()
-    }
-
-    @Test
     fun `ascii map covers printable ascii and rejects everything else`() {
         (0x20..0x7E).forEach { code ->
             assertThat(AsciiKeyMap.stroke(code.toChar())).isNotNull()

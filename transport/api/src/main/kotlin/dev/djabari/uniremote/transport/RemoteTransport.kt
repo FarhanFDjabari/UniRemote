@@ -11,8 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
  * One way of talking to a TV.
  *
  * Feature modules never see an implementation of this — they go through
- * `:data:session`. That indirection is what lets the network transport land in
- * Phase 4 without touching a single line of UI code.
+ * `:data:session`.
  */
 interface RemoteTransport {
 
@@ -30,20 +29,13 @@ interface RemoteTransport {
     /** True if this transport could plausibly reach [target] at all. Cheap, no I/O. */
     fun supports(target: RemoteTarget): Boolean
 
-    /**
-     * The target as this transport actually resolved it after a successful [connect] —
-     * for example the brand silently identified for an unlabelled TV. Null when nothing
-     * changed. Callers that persist targets should store this instead of the input.
-     */
-    val resolvedTarget: RemoteTarget? get() = null
-
     suspend fun connect(target: RemoteTarget): Result<Unit>
 
     suspend fun disconnect()
 
     suspend fun sendKey(key: RemoteKey, action: KeyAction = KeyAction.TAP): Result<Unit>
 
-    /** ASCII-only on HID transports; see [TransportCapability.UNICODE_TEXT]. */
+    /** ASCII-only: HID can only type what a US keyboard layout can. */
     suspend fun sendText(text: String): Result<Unit>
 
     suspend fun sendPointer(event: PointerEvent): Result<Unit>
@@ -57,11 +49,7 @@ enum class TransportCapability {
     MEDIA_KEYS,
     POINTER,
     TEXT_INPUT,
-    /** Text beyond ASCII. HID cannot do this; network IME paths can. */
-    UNICODE_TEXT,
     POWER_OFF,
-    /** Requires the TV to be reachable while off — WoL or an always-on network stack. */
-    POWER_ON,
 }
 
 sealed interface TransportState {
@@ -109,7 +97,7 @@ val TransportError.userMessage: String
         TransportError.HOST_REJECTED -> "The TV didn't accept the connection. Tap Reset connection and try again. If it keeps failing, forget the TV in your phone's Bluetooth settings, remove this phone from the TV's Bluetooth devices, then pair them again."
         TransportError.NOT_PAIRED -> "This phone isn't paired with the TV anymore. Open Bluetooth settings and pair with the TV again, then come back to UniRemote."
         TransportError.CONNECTION_LOST -> "Lost the connection to the TV. Make sure it's on and in range, then tap Try again."
-        TransportError.TARGET_UNREACHABLE -> "Couldn't reach the TV. Make sure it's on and nearby, or on the same Wi-Fi, then try again."
-        TransportError.UNSUPPORTED_TARGET -> "This TV can't be controlled this way. Pair it over Bluetooth, or add it by IP with its brand."
+        TransportError.TARGET_UNREACHABLE -> "Couldn't reach the TV. Make sure it's on and nearby, then try again."
+        TransportError.UNSUPPORTED_TARGET -> "This TV doesn't accept a Bluetooth remote, so UniRemote can't control it. Roku is one of these."
         TransportError.UNKNOWN -> "Something went wrong. Try again."
     }

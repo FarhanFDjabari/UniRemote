@@ -53,7 +53,7 @@ fun TouchpadScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    text = "The connected transport or TV does not support pointer mouse navigation. Bluetooth HID is required.",
+                    text = "Connect to a TV to use the touchpad.",
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(12.dp),
                 )

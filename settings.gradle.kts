@@ -23,7 +23,6 @@ include(":core:common")
 
 include(":transport:api")
 include(":transport:bthid")
-include(":transport:network")
 
 include(":data:session")
 

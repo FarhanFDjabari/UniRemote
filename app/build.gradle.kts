@@ -89,12 +89,8 @@ dependencies {
     testImplementation(libs.roborazzi.compose)
     debugImplementation(libs.compose.ui.test.manifest)
 
-    // Screenshot-test scaffolding constructs the PairingViewModel dependencies directly.
-    testImplementation(project(":transport:network"))
-
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.compose.ui.test.junit4)
-    androidTestImplementation(project(":transport:network"))
 }

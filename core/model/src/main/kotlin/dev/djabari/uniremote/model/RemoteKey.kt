@@ -49,7 +49,6 @@ enum class RemoteKey(val group: KeyGroup) {
 
     // Power
     POWER_OFF(KeyGroup.POWER),
-    POWER_ON(KeyGroup.POWER),
 
     // Text editing (reachable from the keyboard screen)
     BACKSPACE(KeyGroup.TEXT),

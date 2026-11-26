@@ -6,9 +6,6 @@ data class RemoteTarget(
     val displayName: String,
     val brand: TvBrand,
     val bluetoothAddress: String? = null,
-    val ipAddress: String? = null,
-    val macAddress: String? = null,
-    val preferredTransport: TransportId? = null,
 )
 
 enum class TvBrand {
@@ -22,8 +19,8 @@ enum class TvBrand {
 
     /**
      * Whether this brand is known to accept a Bluetooth Classic HID peripheral.
-     * Roku uses a proprietary BT profile and rejects generic HID hosts, so it is
-     * network-only. Everything else gets an attempt.
+     * Roku uses a proprietary BT profile and rejects generic HID hosts, so UniRemote
+     * cannot control it. Everything else gets an attempt.
      */
     val acceptsBluetoothHid: Boolean get() = this != ROKU
 }
@@ -32,6 +29,5 @@ enum class TvBrand {
 value class TransportId(val value: String) {
     companion object {
         val BLUETOOTH_HID = TransportId("bt-hid")
-        val NETWORK = TransportId("network")
     }
 }
